@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>A digital governance platform for the residents and local government of Milaor, Camarines Sur.</b><br>
-  Flutter mobile app for citizens · React web dashboard for administrators · AI-assisted report triage
+  Flutter mobile app for citizens · React web dashboard for administrators · Machine learning report triage
 </p>
 
 <p align="center">
@@ -16,6 +16,9 @@
   <img src="https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white" alt="Node.js">
   <img src="https://img.shields.io/badge/Firebase-FFCA28?logo=firebase&logoColor=black" alt="Firebase">
   <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
+  <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/Hugging_Face-FFD21E?logo=huggingface&logoColor=black" alt="Hugging Face">
 </p>
 
 ---
@@ -35,7 +38,8 @@ Milaud connects residents and the local government in one system:
 
 ### 📱 Mobile app (residents)
 - **Citizen reports** with photo evidence, GPS location, and a live detection camera
-- **AI severity triage** that suggests a priority level from the report description
+- **Machine learning severity triage** that suggests a priority level from the report description
+- **Photo verification** that checks whether attached photos match the reported emergency
 - **Flood alerts and rain forecasts** using live weather data with risk classification
 - **Document requests** (barangay clearance, certificates, permits) with status tracking
 - **Announcements and push notifications** from the municipality
@@ -49,6 +53,19 @@ Milaud connects residents and the local government in one system:
 - Announcement, document request, and emergency hotline management
 - **App customization**: theme changes sync to the mobile app
 - Admin roles protected with Supabase row-level security policies
+
+## Machine learning backend
+
+The triage models run on a **FastAPI** server, packaged with **Docker** and deployed on **Hugging Face Spaces**. The mobile app calls it when a resident submits a report:
+
+| Endpoint | What it does |
+|---|---|
+| `POST /classify` | Classifies the report text and suggests a severity level (Low / Medium / High) |
+| `POST /verify-image` | Detects what is in a photo and flags a mismatch with the reported category |
+| `POST /verify-incident` | Checks 1–3 photos together as one incident, with a multimodal check for harmless look-alikes |
+| `POST /notify-high` | Sends an email alert to officials for High-severity reports |
+
+If the ML service is asleep or unreachable, the app falls back to the resident's own selection, so a report is **never blocked** by the AI.
 
 ## How the AI is used responsibly
 
@@ -65,7 +82,7 @@ AI in Milaud **assists people, it does not replace them**:
 flowchart LR
     R[Resident<br/>Flutter app] -->|reports, requests| S[(Supabase<br/>Postgres + Auth + Storage)]
     A[Admin<br/>React dashboard] <-->|verify, assign, publish| S
-    R -->|severity triage| AI[AI triage API]
+    R -->|text and photo triage| AI[ML triage API<br/>FastAPI + Docker<br/>on Hugging Face Spaces]
     R -->|rain and flood risk| W[Weather backend<br/>Node.js + Express]
     W --> OW[OpenWeatherMap /<br/>Open-Meteo]
     S -->|push trigger| F[Supabase Edge Function]
@@ -80,6 +97,7 @@ flowchart LR
 | Mobile app | Flutter, Dart, Riverpod, Dio, Hive, Geolocator, Camera, fl_chart |
 | Web dashboard | React 19, Vite, Tailwind CSS, React Router |
 | Backend and data | Supabase (Postgres, Auth, Storage, Edge Functions, row-level security) |
+| Machine learning | Python, FastAPI, Docker, Hugging Face Spaces |
 | Weather service | Node.js, Express, OpenWeatherMap, Open-Meteo |
 | Notifications | Firebase Cloud Messaging |
 | Testing | flutter_test, Node test runner |
