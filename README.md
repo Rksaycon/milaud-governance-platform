@@ -64,6 +64,8 @@ I trained the triage models myself:
 
 The trained weights are published on my Hugging Face account: **[reygann/mylaud-ml-models](https://huggingface.co/reygann/mylaud-ml-models)**.
 
+📂 **API source code:** [Rksaycon/milaud-ml-triage-api](https://github.com/Rksaycon/milaud-ml-triage-api)
+
 The models are served by a **FastAPI** server, packaged with **Docker** and deployed on a team **Hugging Face Space**. The mobile app calls it when a resident submits a report:
 
 | Endpoint | What it does |
