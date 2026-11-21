@@ -23,6 +23,8 @@
 
 ---
 
+> **My role:** I created Milaud. I came up with the idea and the system design, and I built and trained all of its machine learning models. The mobile and web interfaces were built with my team. [Details below](#my-role).
+
 ## The problem
 
 In many Philippine municipalities, residents still report emergencies by phone or in person, request documents by lining up at the municipal hall, and hear about announcements and flood warnings by word of mouth. Officials receive reports from many channels with no single place to sort, verify, and track them.
@@ -181,8 +183,16 @@ cd web && node --test
 - [System architecture](mobile/plans/system_architecture_diagram.md)
 - [Web deployment guide](web/DEPLOYMENT_GUIDE.md)
 
-## Author
+## My role
 
 **Reygann Saycon** (Rksaycon) · [GitHub](https://github.com/Rksaycon) · [Hugging Face](https://huggingface.co/reygann)
 
-Built as a team capstone project for the Municipality of Milaor. I trained the machine learning models. The API is hosted on a teammate's Hugging Face Space.
+Milaud was built as a team capstone project for the Municipality of Milaor.
+
+| Area | Who |
+|---|---|
+| Original idea and concept | **Me**: I identified the problem and proposed Milaud |
+| System design | **Me**: how residents, administrators, and the AI work together, including the human-verification workflow |
+| Machine learning | **Me**: trained all five models, ran the retraining rounds to reduce false positives, and built the [triage API](https://github.com/Rksaycon/milaud-ml-triage-api) |
+| Mobile app and web dashboard UI | **Team**: built together with my teammates |
+| API hosting | Deployed on a teammate's Hugging Face Space |
