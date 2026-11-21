@@ -56,7 +56,15 @@ Milaud connects residents and the local government in one system:
 
 ## Machine learning backend
 
-The triage models run on a **FastAPI** server, packaged with **Docker** and deployed on **Hugging Face Spaces**. The mobile app calls it when a resident submits a report:
+I trained the triage models myself:
+
+- **Text severity classifier** built with Hugging Face Transformers
+- **Four PyTorch image models**: fire/flood detection, infrastructure damage, medical emergencies and road crashes, and photo validity
+- Several retraining rounds to reduce false positives (for example, raising confidence thresholds and calibrating the road-crash model)
+
+The trained weights are published on my Hugging Face account: **[reygann/mylaud-ml-models](https://huggingface.co/reygann/mylaud-ml-models)**.
+
+The models are served by a **FastAPI** server, packaged with **Docker** and deployed on a team **Hugging Face Space**. The mobile app calls it when a resident submits a report:
 
 | Endpoint | What it does |
 |---|---|
@@ -97,7 +105,7 @@ flowchart LR
 | Mobile app | Flutter, Dart, Riverpod, Dio, Hive, Geolocator, Camera, fl_chart |
 | Web dashboard | React 19, Vite, Tailwind CSS, React Router |
 | Backend and data | Supabase (Postgres, Auth, Storage, Edge Functions, row-level security) |
-| Machine learning | Python, FastAPI, Docker, Hugging Face Spaces |
+| Machine learning | Python, PyTorch, Hugging Face Transformers, scikit-learn, FastAPI, Docker, Hugging Face Spaces |
 | Weather service | Node.js, Express, OpenWeatherMap, Open-Meteo |
 | Notifications | Firebase Cloud Messaging |
 | Testing | flutter_test, Node test runner |
@@ -173,7 +181,6 @@ cd web && node --test
 
 ## Author
 
-**Rksaycon** · [GitHub](https://github.com/Rksaycon)
-reygann saycon
+**Reygann Saycon** (Rksaycon) · [GitHub](https://github.com/Rksaycon) · [Hugging Face](https://huggingface.co/reygann)
 
-Built as a capstone project for the Municipality of Milaor.
+Built as a team capstone project for the Municipality of Milaor. I trained the machine learning models. The API is hosted on a teammate's Hugging Face Space.
