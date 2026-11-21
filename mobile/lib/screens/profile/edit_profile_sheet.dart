@@ -47,7 +47,8 @@ class _EditProfileDialogState extends ConsumerState<EditProfileDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
       insetPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 40.h),
       child: Padding(
-        padding: EdgeInsets.all(24.w),
+        padding: EdgeInsets.fromLTRB(
+            24.w, 24.w, 24.w, 24.w + MediaQuery.of(context).viewInsets.bottom),
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
@@ -105,7 +106,7 @@ class _EditProfileDialogState extends ConsumerState<EditProfileDialog> {
                 // ── Save button ─────────────────────────────
                 SizedBox(
                   width: double.infinity,
-                  height: 50.h,
+                  height: 63.h,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HomeColors.heritagePurple,
@@ -132,6 +133,7 @@ class _EditProfileDialogState extends ConsumerState<EditProfileDialog> {
                           ),
                   ),
                 ),
+                SizedBox(height: 12.h),
               ],
             ),
           ),

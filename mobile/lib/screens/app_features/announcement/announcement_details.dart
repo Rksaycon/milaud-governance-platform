@@ -82,11 +82,15 @@ class AnnouncementFeedScreen extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _iconCircle(icon: Icons.arrow_back_rounded, onTap: () => Navigator.pop(context)),
+              _iconCircle(
+                  icon: Icons.arrow_back_rounded,
+                  onTap: () => Navigator.pop(context)),
               Row(
                 children: [
                   _iconCircle(
-                    icon: announcement.isRead ? Icons.bookmark_outline : Icons.bookmark_rounded,
+                    icon: announcement.isRead
+                        ? Icons.bookmark_outline
+                        : Icons.bookmark_rounded,
                     onTap: () {},
                   ),
                   SizedBox(width: 8.w),
@@ -127,20 +131,24 @@ class AnnouncementFeedScreen extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Icon(Icons.campaign_rounded, size: 64.sp, color: Colors.white.withValues(alpha: 0.7)),
+        child: Icon(Icons.campaign_rounded,
+            size: 64.sp, color: Colors.white.withValues(alpha: 0.7)),
       ),
     );
   }
 
-  static Widget _iconCircle({required IconData icon, required VoidCallback onTap}) {
+  static Widget _iconCircle(
+      {required IconData icon, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 40.w, height: 40.w,
+        width: 40.w,
+        height: 40.w,
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.18),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1),
         ),
         child: Icon(icon, size: 20.sp, color: Colors.white),
       ),
@@ -153,11 +161,20 @@ class AnnouncementFeedScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: HomeColors.heritagePurple,
         borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [BoxShadow(color: HomeColors.heritagePurple.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+              color: HomeColors.heritagePurple.withValues(alpha: 0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 3))
+        ],
       ),
       child: Text(
         label.toUpperCase(),
-        style: GoogleFonts.inter(fontSize: 11.sp, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.6),
+        style: GoogleFonts.inter(
+            fontSize: 11.sp,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            letterSpacing: 0.6),
       ),
     );
   }
@@ -168,14 +185,24 @@ class AnnouncementFeedScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: HomeColors.dangerRed,
         borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [BoxShadow(color: HomeColors.dangerRed.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: HomeColors.dangerRed.withValues(alpha: 0.3),
+              blurRadius: 6,
+              offset: const Offset(0, 2))
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.priority_high_rounded, size: 13.sp, color: Colors.white),
           SizedBox(width: 3.w),
-          Text('IMPORTANT', style: GoogleFonts.inter(fontSize: 10.sp, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.5)),
+          Text('IMPORTANT',
+              style: GoogleFonts.inter(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: 0.5)),
         ],
       ),
     );
@@ -191,27 +218,41 @@ class AnnouncementFeedScreen extends StatelessWidget {
         decoration: BoxDecoration(
           color: HomeColors.cardWhite,
           borderRadius: BorderRadius.circular(22.r),
-          boxShadow: [BoxShadow(color: HomeColors.deepAnchor.withValues(alpha: 0.07), blurRadius: 24, offset: const Offset(0, 10))],
+          boxShadow: [
+            BoxShadow(
+                color: HomeColors.deepAnchor.withValues(alpha: 0.07),
+                blurRadius: 24,
+                offset: const Offset(0, 10))
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.calendar_today_rounded, size: 14.sp, color: HomeColors.riverFlow),
+                Icon(Icons.calendar_today_rounded,
+                    size: 14.sp, color: HomeColors.riverFlow),
                 SizedBox(width: 6.w),
                 Text(
                   'Published ${announcement.formattedDate}',
-                  style: GoogleFonts.inter(fontSize: 12.sp, fontWeight: FontWeight.w500, color: HomeColors.riverFlow),
+                  style: GoogleFonts.inter(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w500,
+                      color: HomeColors.riverFlow),
                 ),
                 const Spacer(),
                 if (!announcement.isRead)
                   Container(
-                    width: 10.w, height: 10.w,
+                    width: 10.w,
+                    height: 10.w,
                     decoration: BoxDecoration(
                       color: HomeColors.infoBlue,
                       shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: HomeColors.infoBlue.withValues(alpha: 0.4), blurRadius: 6)],
+                      boxShadow: [
+                        BoxShadow(
+                            color: HomeColors.infoBlue.withValues(alpha: 0.4),
+                            blurRadius: 6)
+                      ],
                     ),
                   ),
               ],
@@ -219,7 +260,11 @@ class AnnouncementFeedScreen extends StatelessWidget {
             SizedBox(height: 16.h),
             Text(
               announcement.title,
-              style: GoogleFonts.poppins(fontSize: 22.sp, fontWeight: FontWeight.w700, color: HomeColors.deepAnchor, height: 1.25),
+              style: GoogleFonts.poppins(
+                  fontSize: 22.sp,
+                  fontWeight: FontWeight.w700,
+                  color: HomeColors.deepAnchor,
+                  height: 1.25),
             ),
           ],
         ),
@@ -234,15 +279,27 @@ class AnnouncementFeedScreen extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(height: 4.h),
-          _infoCard(icon: Icons.access_time_rounded, iconColor: HomeColors.infoBlue, label: 'TIMEFRAME', value: 'Refer to details below', accentColor: HomeColors.infoBlue),
+          _infoCard(
+              icon: Icons.access_time_rounded,
+              iconColor: HomeColors.infoBlue,
+              label: 'TIMEFRAME',
+              value: 'Refer to details below',
+              accentColor: HomeColors.infoBlue),
           SizedBox(height: 12.h),
-          _infoCard(icon: Icons.location_on_rounded, iconColor: HomeColors.warningAmber, label: 'COVERAGE', value: 'Milaor, Camarines Sur', accentColor: HomeColors.warningAmber),
+          _infoCard(
+              icon: Icons.location_on_rounded,
+              iconColor: HomeColors.warningAmber,
+              label: 'COVERAGE',
+              value: 'Milaor, Camarines Sur',
+              accentColor: HomeColors.warningAmber),
           SizedBox(height: 12.h),
           Container(
             width: double.infinity,
             padding: EdgeInsets.all(16.w),
             decoration: BoxDecoration(
-              color: announcement.isRead ? HomeColors.successGreen.withValues(alpha: 0.06) : HomeColors.warmHearth,
+              color: announcement.isRead
+                  ? HomeColors.successGreen.withValues(alpha: 0.06)
+                  : HomeColors.warmHearth,
               borderRadius: BorderRadius.circular(16.r),
               border: Border.all(
                 color: announcement.isRead
@@ -253,7 +310,8 @@ class AnnouncementFeedScreen extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 38.w, height: 38.w,
+                  width: 38.w,
+                  height: 38.w,
                   decoration: BoxDecoration(
                     color: announcement.isRead
                         ? HomeColors.successGreen.withValues(alpha: 0.12)
@@ -261,19 +319,27 @@ class AnnouncementFeedScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10.r),
                   ),
                   child: Icon(
-                    announcement.isRead ? Icons.check_circle_outline_rounded : Icons.info_outline_rounded,
+                    announcement.isRead
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.info_outline_rounded,
                     size: 20.sp,
-                    color: announcement.isRead ? HomeColors.successGreen : HomeColors.heritagePurple,
+                    color: announcement.isRead
+                        ? HomeColors.successGreen
+                        : HomeColors.heritagePurple,
                   ),
                 ),
                 SizedBox(width: 14.w),
                 Expanded(
                   child: Text(
-                    announcement.isRead ? 'You have read this announcement' : 'New announcement — tap for full details',
+                    announcement.isRead
+                        ? 'You have read this announcement'
+                        : 'New announcement — tap for full details',
                     style: GoogleFonts.inter(
                       fontSize: 13.sp,
                       fontWeight: FontWeight.w500,
-                      color: announcement.isRead ? HomeColors.successGreen : HomeColors.riverFlow,
+                      color: announcement.isRead
+                          ? HomeColors.successGreen
+                          : HomeColors.riverFlow,
                     ),
                   ),
                 ),
@@ -299,7 +365,12 @@ class AnnouncementFeedScreen extends StatelessWidget {
         color: HomeColors.cardWhite,
         borderRadius: BorderRadius.circular(16.r),
         border: Border(left: BorderSide(color: accentColor, width: 3.w)),
-        boxShadow: [BoxShadow(color: HomeColors.deepAnchor.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+              color: HomeColors.deepAnchor.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 3))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,7 +393,10 @@ class AnnouncementFeedScreen extends StatelessWidget {
           SizedBox(height: 6.h),
           Text(
             value,
-            style: GoogleFonts.inter(fontSize: 14.sp, fontWeight: FontWeight.w600, color: HomeColors.deepAnchor),
+            style: GoogleFonts.inter(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w600,
+                color: HomeColors.deepAnchor),
           ),
         ],
       ),
@@ -340,13 +414,19 @@ class AnnouncementFeedScreen extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 4.w, height: 22.h,
-                decoration: BoxDecoration(color: HomeColors.heritagePurple, borderRadius: BorderRadius.circular(2.r)),
+                width: 4.w,
+                height: 22.h,
+                decoration: BoxDecoration(
+                    color: HomeColors.heritagePurple,
+                    borderRadius: BorderRadius.circular(2.r)),
               ),
               SizedBox(width: 10.w),
               Text(
                 'Full Details',
-                style: GoogleFonts.poppins(fontSize: 19.sp, fontWeight: FontWeight.w700, color: HomeColors.deepAnchor),
+                style: GoogleFonts.poppins(
+                    fontSize: 19.sp,
+                    fontWeight: FontWeight.w700,
+                    color: HomeColors.deepAnchor),
               ),
             ],
           ),
@@ -357,12 +437,21 @@ class AnnouncementFeedScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: HomeColors.cardWhite,
               borderRadius: BorderRadius.circular(18.r),
-              border: Border.all(color: HomeColors.heritagePurple.withValues(alpha: 0.08)),
-              boxShadow: [BoxShadow(color: HomeColors.deepAnchor.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
+              border: Border.all(
+                  color: HomeColors.heritagePurple.withValues(alpha: 0.08)),
+              boxShadow: [
+                BoxShadow(
+                    color: HomeColors.deepAnchor.withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4))
+              ],
             ),
             child: Text(
               announcement.description,
-              style: GoogleFonts.inter(fontSize: 14.sp, height: 1.75, color: AppColors.neutralGray800),
+              style: GoogleFonts.inter(
+                  fontSize: 14.sp,
+                  height: 1.75,
+                  color: AppColors.neutralGray800),
             ),
           ),
         ],
@@ -383,12 +472,17 @@ class AnnouncementFeedScreen extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: () {},
                   icon: Icon(Icons.print_outlined, size: 17.sp),
-                  label: Text('Print', style: GoogleFonts.inter(fontSize: 13.sp, fontWeight: FontWeight.w600)),
+                  label: Text('Print',
+                      style: GoogleFonts.inter(
+                          fontSize: 13.sp, fontWeight: FontWeight.w600)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: HomeColors.heritagePurple,
-                    side: BorderSide(color: HomeColors.heritagePurple.withValues(alpha: 0.5)),
+                    side: BorderSide(
+                        color:
+                            HomeColors.heritagePurple.withValues(alpha: 0.5)),
                     padding: EdgeInsets.symmetric(vertical: 14.h),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14.r)),
                   ),
                 ),
               ),
@@ -397,13 +491,16 @@ class AnnouncementFeedScreen extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () {},
                   icon: Icon(Icons.share_outlined, size: 17.sp),
-                  label: Text('Share', style: GoogleFonts.inter(fontSize: 13.sp, fontWeight: FontWeight.w600)),
+                  label: Text('Share',
+                      style: GoogleFonts.inter(
+                          fontSize: 13.sp, fontWeight: FontWeight.w600)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: HomeColors.heritagePurple,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: EdgeInsets.symmetric(vertical: 14.h),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14.r)),
                   ),
                 ),
               ),
@@ -416,20 +513,27 @@ class AnnouncementFeedScreen extends StatelessWidget {
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Thank you! Your concern has been forwarded to the LGU.', style: GoogleFonts.inter(fontSize: 13.sp)),
+                    content: Text(
+                        'Thank you! Your concern has been forwarded to the LGU.',
+                        style: GoogleFonts.inter(fontSize: 13.sp)),
                     backgroundColor: HomeColors.successGreen,
                     behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.r)),
                   ),
                 );
               },
               icon: Icon(Icons.flag_outlined, size: 17.sp),
-              label: Text('Report an Issue with this Announcement', style: GoogleFonts.inter(fontSize: 13.sp, fontWeight: FontWeight.w600)),
+              label: Text('Report an Issue with this Announcement',
+                  style: GoogleFonts.inter(
+                      fontSize: 13.sp, fontWeight: FontWeight.w600)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: HomeColors.dangerRed,
-                side: BorderSide(color: HomeColors.dangerRed.withValues(alpha: 0.3)),
+                side: BorderSide(
+                    color: HomeColors.dangerRed.withValues(alpha: 0.3)),
                 padding: EdgeInsets.symmetric(vertical: 14.h),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14.r)),
               ),
             ),
           ),

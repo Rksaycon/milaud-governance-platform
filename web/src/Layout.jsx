@@ -163,6 +163,7 @@ const Layout = () => {
     { name: "Citizen Reports", path: "/citizen-reports", icon: "📝" },
     { name: "Document Requests", path: "/document-requests", icon: "📄" },
     { name: "Emergency Hotline", path: "/emergency-hotline", icon: "🚨" },
+    { name: "App Customization", path: "/app-customization", icon: "🎨" },
     { name: "Admin Profile", path: "/profile", icon: "👤" },
   ];
 

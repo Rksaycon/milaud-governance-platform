@@ -45,7 +45,7 @@ class RainForecastScreen extends ConsumerStatefulWidget {
 }
 
 class _RainForecastScreenState extends ConsumerState<RainForecastScreen> {
-  int _selectedDayIndex = 0;
+  int expandedDayIndex = 0;
 
   AppColorScheme get _colors => AppColors.of(context);
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -257,11 +257,7 @@ class _RainForecastScreenState extends ConsumerState<RainForecastScreen> {
         SizedBox(height: 16.h),
         _buildSevenDaySection(data),
         SizedBox(height: 16.h),
-        _buildHourlyDetailCard(data),
-        SizedBox(height: 16.h),
         _buildWeeklySummaryCard(data),
-        SizedBox(height: 16.h),
-        _buildWaterLevelCard(state),
         SizedBox(height: 16.h),
         _buildSafetyGuidanceCard(data),
         SizedBox(height: 16.h),
@@ -669,15 +665,19 @@ class _RainForecastScreenState extends ConsumerState<RainForecastScreen> {
           SizedBox(height: 12.h),
           ...List.generate(days.length, (index) {
             final day = days[index];
-            final selected = index == _selectedDayIndex;
-            return _dayRow(day, index, selected);
+            final expanded = index == expandedDayIndex;
+            final dateStr = day.time;
+            final hours =
+                data.hourly.where((h) => h.time.startsWith(dateStr)).toList();
+            return _dayRow(day, index, expanded, hours);
           }),
         ],
       ),
     );
   }
 
-  Widget _dayRow(WeatherDay day, int index, bool selected) {
+  Widget _dayRow(
+      WeatherDay day, int index, bool expanded, List<WeatherHour> hours) {
     final descriptor = describeWeatherCode(day.weatherCode);
     final precip = day.precipitationSumMm ?? day.rainSumMm ?? day.showersSumMm;
     final date = _parseDate(day.time);
@@ -685,156 +685,168 @@ class _RainForecastScreenState extends ConsumerState<RainForecastScreen> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: 8.h),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12.r),
-        onTap: () => setState(() => _selectedDayIndex = index),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
-          decoration: BoxDecoration(
-            color:
-                selected ? accent.withValues(alpha: 0.08) : Colors.transparent,
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(
-              color: selected ? accent.withValues(alpha: 0.4) : _colors.border,
-            ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 52.w,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _dayLabel(date, index),
-                      style: GoogleFonts.inter(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w700,
-                        color: _colors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      date == null ? '--' : DateFormat('MMM d').format(date),
-                      style: GoogleFonts.inter(
-                        fontSize: 11.sp,
-                        color: _colors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: 8.w),
-              Icon(descriptor.icon, size: 22.sp, color: AppColors.riverFlow),
-              SizedBox(width: 8.w),
-              Expanded(
-                child: Text(
-                  '${_tempText(day)}  -  '
-                  '${precip == null ? '--' : '${precip.toStringAsFixed(1)} mm'}  -  '
-                  '${day.precipitationProbabilityMaxPct == null ? '--' : '${day.precipitationProbabilityMaxPct}%'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 12.sp,
-                    color: _colors.textSecondary,
-                  ),
-                ),
-              ),
-              SizedBox(width: 8.w),
-              Icon(
-                selected
-                    ? Icons.keyboard_arrow_up_rounded
-                    : Icons.keyboard_arrow_down_rounded,
-                color: _colors.textMuted,
-                size: 20.sp,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // HOURLY DETAIL (for the selected day)
-  Widget _buildHourlyDetailCard(WeatherForecastData data) {
-    final days = data.daily;
-    if (days.isEmpty || _selectedDayIndex >= days.length) {
-      return const SizedBox.shrink();
-    }
-    final selectedDay = days[_selectedDayIndex];
-    final dateStr = selectedDay.time;
-    final hours = data.hourly.where((h) => h.time.startsWith(dateStr)).toList();
-
-    return _cardShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle(
-            'Hourly Detail - ${_dayLabel(_parseDate(dateStr), _selectedDayIndex)}',
-            Icons.schedule_rounded,
-          ),
-          SizedBox(height: 12.h),
-          if (hours.isEmpty)
-            _emptyInline('No hourly data available for this day.')
-          else
-            SizedBox(
-              height: 150.h,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: hours.length,
-                separatorBuilder: (_, __) => SizedBox(width: 10.w),
-                itemBuilder: (context, i) {
-                  final h = hours[i];
-                  final precip = h.precipitationMm ?? h.rainMm ?? h.showersMm;
-                  return Container(
-                    width: 74.w,
-                    padding: EdgeInsets.symmetric(vertical: 10.h),
-                    decoration: BoxDecoration(
-                      color: _isDark
-                          ? AppColors.dark.surface
-                          : AppColors.warmHearth,
-                      borderRadius: BorderRadius.circular(10.r),
-                    ),
+          InkWell(
+            borderRadius: BorderRadius.circular(12.r),
+            onTap: () => setState(() => expandedDayIndex = index),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+              decoration: BoxDecoration(
+                color: expanded
+                    ? accent.withValues(alpha: 0.08)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(
+                  color:
+                      expanded ? accent.withValues(alpha: 0.4) : _colors.border,
+                ),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 52.w,
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _hourLabel(h.time),
+                          _dayLabel(date, index),
                           style: GoogleFonts.inter(
-                            fontSize: 11.sp,
-                            fontWeight: FontWeight.w600,
-                            color: _colors.textSecondary,
-                          ),
-                        ),
-                        SizedBox(height: 6.h),
-                        Icon(Icons.water_drop_rounded,
-                            size: 16.sp, color: AppColors.riverFlow),
-                        SizedBox(height: 4.h),
-                        Text(
-                          precip == null
-                              ? '--'
-                              : '${precip.toStringAsFixed(1)} mm',
-                          style: GoogleFonts.inter(
-                            fontSize: 12.sp,
+                            fontSize: 13.sp,
                             fontWeight: FontWeight.w700,
                             color: _colors.textPrimary,
                           ),
                         ),
-                        if (h.precipitationProbabilityPct != null) ...[
-                          SizedBox(height: 2.h),
-                          Text(
-                            '${h.precipitationProbabilityPct!.round()}%',
-                            style: GoogleFonts.inter(
-                              fontSize: 10.sp,
-                              color: _colors.textMuted,
-                            ),
+                        Text(
+                          date == null
+                              ? '--'
+                              : DateFormat('MMM d').format(date),
+                          style: GoogleFonts.inter(
+                            fontSize: 11.sp,
+                            color: _colors.textMuted,
                           ),
-                        ],
+                        ),
                       ],
                     ),
-                  );
-                },
+                  ),
+                  SizedBox(width: 8.w),
+                  Icon(descriptor.icon,
+                      size: 22.sp, color: AppColors.riverFlow),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      '${_tempText(day)}  -  '
+                      '${precip == null ? '--' : '${precip.toStringAsFixed(1)} mm'}  -  '
+                      '${day.precipitationProbabilityMaxPct == null ? '--' : '${day.precipitationProbabilityMaxPct}%'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.sp,
+                        color: _colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  Icon(
+                    expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: _colors.textMuted,
+                    size: 20.sp,
+                  ),
+                ],
               ),
             ),
+          ),
+          if (expanded) ...[
+            SizedBox(height: 8.h),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+              decoration: BoxDecoration(
+                color: _isDark ? AppColors.dark.surface : AppColors.warmHearth,
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: _colors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hourly Detail - ${_dayLabel(date, index)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w600,
+                      color: _colors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: 10.h),
+                  if (hours.isEmpty)
+                    _emptyInline('No hourly data available for this day.')
+                  else
+                    SizedBox(
+                      height: 150.h,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: hours.length,
+                        separatorBuilder: (_, __) => SizedBox(width: 10.w),
+                        itemBuilder: (context, i) {
+                          final h = hours[i];
+                          final precip =
+                              h.precipitationMm ?? h.rainMm ?? h.showersMm;
+                          return Container(
+                            width: 74.w,
+                            padding: EdgeInsets.symmetric(vertical: 10.h),
+                            decoration: BoxDecoration(
+                              color: _cardBg,
+                              borderRadius: BorderRadius.circular(10.r),
+                              border: Border.all(color: _colors.border),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _hourLabel(h.time),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.sp,
+                                    fontWeight: FontWeight.w600,
+                                    color: _colors.textSecondary,
+                                  ),
+                                ),
+                                SizedBox(height: 6.h),
+                                Icon(Icons.water_drop_rounded,
+                                    size: 16.sp, color: AppColors.riverFlow),
+                                SizedBox(height: 4.h),
+                                Text(
+                                  precip == null
+                                      ? '--'
+                                      : '${precip.toStringAsFixed(1)} mm',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.w700,
+                                    color: _colors.textPrimary,
+                                  ),
+                                ),
+                                if (h.precipitationProbabilityPct != null) ...[
+                                  SizedBox(height: 2.h),
+                                  Text(
+                                    '${h.precipitationProbabilityPct!.round()}%',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.sp,
+                                      color: _colors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -937,69 +949,6 @@ class _RainForecastScreenState extends ConsumerState<RainForecastScreen> {
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // WATER LEVEL CARD (honest unavailable state)
-  Widget _buildWaterLevelCard(RainForecastState state) {
-    final wl = state.waterLevel;
-    final available = !wl.isUnavailable;
-    return _cardShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('River Water Level', Icons.waves_rounded),
-          SizedBox(height: 12.h),
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
-            decoration: BoxDecoration(
-              color: available
-                  ? _RFColors.safe.withValues(alpha: 0.10)
-                  : _colors.textMuted.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12.r),
-              border: Border.all(
-                color: available
-                    ? _RFColors.safe.withValues(alpha: 0.35)
-                    : _colors.border,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  available
-                      ? Icons.check_circle_outline
-                      : Icons.cloud_off_rounded,
-                  size: 20.sp,
-                  color: available ? _RFColors.safe : _colors.textMuted,
-                ),
-                SizedBox(width: 10.w),
-                Expanded(
-                  child: Text(
-                    wl.message,
-                    style: GoogleFonts.inter(
-                      fontSize: 12.sp,
-                      height: 1.5,
-                      color: _colors.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 10.h),
-          Text(
-            'River stage is a separate measurement (metres) from rainfall '
-            '(millimetres). This screen never presents rainfall as a river height.',
-            style: GoogleFonts.inter(
-              fontSize: 11.sp,
-              height: 1.45,
-              color: _colors.textMuted,
             ),
           ),
         ],

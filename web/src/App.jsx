@@ -9,6 +9,7 @@ import CitizenReportsPage from "./CitizenReportsPage";
 import DocumentRequestsPage from "./DocumentRequestsPage";
 import EmergencyHotlinePage from "./EmergencyHotlinePage";
 import AdminProfilePage from "./AdminProfilePage";
+import AppCustomizationPage from "./AppCustomizationPage";
 import Layout from "./Layout";
 
 // Private route component — now backed by a real Supabase auth session
@@ -48,6 +49,7 @@ function AppRoutes() {
           <Route path="document-requests" element={<DocumentRequestsPage />} />
           <Route path="emergency-hotline" element={<EmergencyHotlinePage />} />
           <Route path="profile" element={<AdminProfilePage />} />
+          <Route path="app-customization" element={<AppCustomizationPage />} />
         </Route>
       </Routes>
     </Router>

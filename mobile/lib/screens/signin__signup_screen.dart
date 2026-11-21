@@ -118,7 +118,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  SizedBox(height: 30.h),
+                  SizedBox(height: 50.h),
 
                   // Logo with glow shadow
                   Container(
@@ -139,7 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
 
-                  SizedBox(height: 15.h),
+                  SizedBox(height: 30.h),
 
                   Text(
                     "Welcome to Maylaud",
@@ -256,8 +256,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ],
                     ),
                   ),
-
-                  SizedBox(height: 30.h),
+                  SizedBox(height: 100.h),
 
                   // Footer
                   Text(

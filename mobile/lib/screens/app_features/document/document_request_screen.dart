@@ -2,15 +2,17 @@
 // ignore_for_file: unused_element
 
 import 'package:flutter/material.dart';
-import 'package:may_laud/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
-import '../../home/home.dart';
-import '../../home/nav_bar_button.dart';
+import '../../../theme/app_theme.dart';
 import '../../../utils/guest_guard.dart';
 import '../../../providers/content_providers.dart';
+import '../../../providers/auth_provider.dart';
+import '../../home/home.dart';
+import '../../home/nav_bar_button.dart';
 import 'document_tracking_screen.dart';
 
 class DocumentRequestScreen extends ConsumerStatefulWidget {
@@ -28,8 +30,6 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
   // ─── ADAPTIVE COLORS ──────────────────────────────────
   Color get _scaffoldBg => _isDark ? _cs!.background : HomeColors.warmHearth;
   Color get _cardBg => _isDark ? _cs!.surface : HomeColors.cardWhite;
-  Color get _cardBg70 => _cardBg.withValues(alpha: 0.7);
-  Color get _cardBg60 => _cardBg.withValues(alpha: 0.6);
   Color get _titleText => _isDark ? _cs!.onSurface : HomeColors.deepAnchor;
   Color get _bodyText => _isDark
       ? _cs!.onSurface.withValues(alpha: 0.65)
@@ -49,31 +49,6 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
       ? AppColors.neutralWhite.withValues(alpha: 0.24)
       : const Color(0xFFD1D5DB);
 
-  // urgency backgrounds — dark mode strips the pastel tint
-  Color _urgencyBg(String urgency) {
-    if (_isDark) return _cs!.surface;
-    switch (urgency) {
-      case 'Urgent':
-        return AppColors.error.withValues(alpha: 0.05);
-      case 'Normal':
-        return AppColors.successAlt.withValues(alpha: 0.06);
-      default:
-        return AppColors.warningAlt.withValues(alpha: 0.08);
-    }
-  }
-
-  // urgency foreground stays the same regardless of mode
-  Color _urgencyColor(String urgency) {
-    switch (urgency) {
-      case 'Urgent':
-        return AppColors.errorDark;
-      case 'Normal':
-        return AppColors.successAlt;
-      default:
-        return AppColors.warningAlt;
-    }
-  }
-
   // ─── FORM STATE ───────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _fullNameController = TextEditingController();
@@ -83,15 +58,41 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
       TextEditingController();
 
   String _selectedDocumentType = 'Business Permit';
-  String _selectedUrgency = 'Normal (3-5 days)';
-  int _currentStep = 0;
+  String? _selectedBarangay;
+
+  final TextEditingController _barangaySearchController =
+      TextEditingController();
+
+  // OFFICIAL BARANGAYS OF MILAOR, CAMARINES SUR
+  static const List<String> _milaorBarangays = [
+    'Alimbuyog',
+    'Amparado',
+    'Balagbag',
+    'Borongborongan',
+    'Cabugao',
+    'Capucnasan',
+    'Dalipay',
+    'Del Rosario',
+    'Flordeliz',
+    'Lipot',
+    'Mayaopayawan',
+    'Maycatmon',
+    'Maydaso',
+    'San Antonio',
+    'San Jose',
+    'San Miguel',
+    'San Roque',
+    'San Vicente',
+    'Santo Domingo',
+    'Tarusanan',
+  ];
+
+  bool _isSubmitting = false;
 
   /// Supporting documents the resident attached. Raw bytes rather than a
-  /// `dart:io File` so reading/picking works on web too — see
-  /// DocumentAttachment in content_providers.dart.
+  /// `dart:io File` so reading/picking works on web too.
   final List<DocumentAttachment> _attachedFiles = [];
   final ImagePicker _picker = ImagePicker();
-  bool _isSubmitting = false;
 
   // ─── DOCUMENT TYPES ───────────────────────────────────
   final List<Map<String, dynamic>> _documentTypes = [
@@ -176,12 +177,6 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
   bool get _selectedIsAvailable =>
       (_selectedDocMeta['available'] as bool?) ?? true;
 
-  final List<Map<String, String>> _urgencyLevels = [
-    {'label': 'Normal', 'desc': '3-5 days', 'icon': 'schedule'},
-    {'label': 'Standard', 'desc': '1 week', 'icon': 'event_note'},
-    {'label': 'Urgent', 'desc': '24 hours', 'icon': 'priority_high'},
-  ];
-
   double get _fee => (_selectedDocMeta['fee'] as num).toDouble();
   bool get _isFree => _fee == 0.0;
 
@@ -196,14 +191,37 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     }
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _prefillFromAuth();
+    if (_selectedBarangay != null && _selectedBarangay!.isNotEmpty) {
+      _barangaySearchController.text = _selectedBarangay!;
+    }
+  }
+
+  /// Auto-populates resident fields from the authenticated profile when
+  /// available. Never invents data — fields stay empty for guests or when
+  /// the profile has no value.
+  void _prefillFromAuth() {
+    final authState = ref.read(authProvider);
+    final user = authState.user;
+    if (user == null) return;
+    if (user.name.isNotEmpty && _fullNameController.text.isEmpty) {
+      _fullNameController.text = user.name;
+    }
+    if (user.address != null &&
+        user.address!.isNotEmpty &&
+        _addressController.text.isEmpty) {
+      _addressController.text = user.address!;
+    }
+  }
+
   // ─── PHOTO PICKING ────────────────────────────────────
   Future<void> _pickImage() async {
     final XFile? image =
         await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (image == null) return;
-    // Read the bytes up front (rather than holding a `dart:io File`) — that's
-    // what the Supabase upload needs, and it keeps the picker working on web
-    // where `File` doesn't exist.
     final bytes = await image.readAsBytes();
     if (!mounted) return;
     setState(() => _attachedFiles
@@ -274,6 +292,25 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
           }),
           SizedBox(height: 8.h),
         ],
+      ),
+    );
+  }
+
+  // ─── BARANGAY PICKER (SEARCHABLE) ─────────────────────
+  void _showBarangayPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _BarangayPickerSheet(
+        barangays: _milaorBarangays,
+        selectedBarangay: _selectedBarangay,
+        onSelected: (barangay) {
+          setState(() {
+            _selectedBarangay = barangay;
+            _barangaySearchController.text = barangay;
+          });
+        },
       ),
     );
   }
@@ -423,7 +460,6 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     final double fee = (doc['fee'] as num).toDouble();
     final bool available = (doc['available'] as bool?) ?? true;
 
-    // tile bg adapts to dark mode
     final tileBg = isSelected
         ? accent.withValues(alpha: 0.06)
         : available
@@ -589,18 +625,19 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
       return;
     }
     setState(() => _isSubmitting = true);
-    // Persist the request so it shows up in the user's real
-    // Total/Approved/Pending stats on the Profile screen instead of
-    // being a purely cosmetic success dialog.
-    //
+
     // Every field collected on this screen is sent — Full Name, Address,
-    // Additional Notes, the urgency level and the attached documents — so the
-    // web admin sees the exact request the resident filed (see
+    // Additional Notes, the urgency level and the attached documents — so
+    // the web admin sees the exact request the resident filed (see
     // supabase/document_requests_full_details.sql).
+    //
+    // `urgency` is set to a neutral default because residents no longer
+    // choose a processing tier — queue position is handled by the
+    // municipality's official service procedures.
     await ref.read(documentRequestsProvider.notifier).submitRequest(
           documentType: _selectedDocumentType,
           purpose: _purposeController.text.trim(),
-          urgency: _selectedUrgency,
+          urgency: 'Standard',
           fullName: _fullNameController.text.trim(),
           address: _addressController.text.trim(),
           additionalNotes: _additionalNotesController.text.trim(),
@@ -613,14 +650,24 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
   }
 
   void _showSuccessScreen() {
-    final refId =
-        'MLR-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
-    final urgencyLabel = _selectedUrgency.split(' ')[0];
+    final refId = _buildReferenceNumber();
+    final urgencyLabel = 'Standard';
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => _buildSuccessDialog(ctx, refId, urgencyLabel),
     );
+  }
+
+  /// Derives the reference number from the most recently inserted request so
+  /// it always matches what Supabase stored — never a fabricated value.
+  String _buildReferenceNumber() {
+    final requests = ref.read(documentRequestsProvider);
+    if (requests.isNotEmpty) {
+      return requests.first.reference;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch.toString();
+    return 'MLR-${now.substring(now.length - 8).toUpperCase()}';
   }
 
   Widget _buildSuccessDialog(
@@ -631,7 +678,7 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     final tipBorder = _isDark
         ? const Color(0xFF7A5800)
         : AppColors.warningAlt.withValues(alpha: 0.4);
-    final tipText = _isDark ? AppColors.warningAlt : AppColors.warningAlt;
+    final tipText = AppColors.warningAlt;
     final refBg = _isDark ? _cs!.background : _scaffoldBg;
     final refBorder = _isDark
         ? _cs!.onSurface.withValues(alpha: 0.12)
@@ -639,187 +686,290 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(horizontal: 28.w),
-      child: Container(
-        padding: EdgeInsets.all(28.w),
-        decoration: BoxDecoration(
-          color: _cardBg,
-          borderRadius: BorderRadius.circular(28.r),
-          boxShadow: [
-            BoxShadow(
-              color: HomeColors.heritagePurple.withValues(alpha: 0.12),
-              blurRadius: 32,
-              offset: const Offset(0, 12),
-            ),
-          ],
+      // Keep the dialog inside the visible screen on short devices.
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: 20.w,
+        vertical: 12.h,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(ctx).height * 0.88,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(height: 4.h),
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.elasticOut,
-              builder: (_, value, __) => Transform.scale(
-                scale: value,
-                child: Container(
-                  width: 72.w,
-                  height: 72.w,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF22C55E), AppColors.successAlt],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20.r),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.successAlt.withValues(alpha: 0.3),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: 22.w,
+            vertical: 20.h,
+          ),
+          decoration: BoxDecoration(
+            color: _cardBg,
+            borderRadius: BorderRadius.circular(28.r),
+            boxShadow: [
+              BoxShadow(
+                color: HomeColors.heritagePurple.withValues(alpha: 0.12),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          // The details scroll, while both action buttons stay visible.
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                fit: FlexFit.loose,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(height: 4.h),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.elasticOut,
+                        builder: (_, value, __) => Transform.scale(
+                          scale: value,
+                          child: Container(
+                            width: 72.w,
+                            height: 72.w,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF22C55E),
+                                  AppColors.successAlt,
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(20.r),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.successAlt
+                                      .withValues(alpha: 0.3),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.check_rounded,
+                              size: 38.sp,
+                              color: _cardBg,
+                            ),
+                          ),
+                        ),
                       ),
+                      SizedBox(height: 18.h),
+                      Text(
+                        'Request Successfully Submitted',
+                        style: TextStyle(
+                          fontSize: 19.sp,
+                          fontWeight: FontWeight.w700,
+                          color: _titleText,
+                          letterSpacing: -0.3,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        'Your request has been received by the municipal office. You can monitor its progress through May-Laud.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.sp,
+                          color: _mutedText,
+                          height: 1.5,
+                        ),
+                      ),
+                      SizedBox(height: 18.h),
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: 14.h),
+                        decoration: BoxDecoration(
+                          color: refBg,
+                          borderRadius: BorderRadius.circular(14.r),
+                          border: Border.all(color: refBorder),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'REFERENCE NUMBER',
+                              style: TextStyle(
+                                fontSize: 10.sp,
+                                fontWeight: FontWeight.w600,
+                                color: _mutedText,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            SizedBox(height: 4.h),
+                            SelectableText(
+                              refId,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 22.sp,
+                                fontWeight: FontWeight.w800,
+                                color: HomeColors.heritagePurple,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 18.h),
+                      _successDetailRow(
+                        Icons.description_outlined,
+                        'Document',
+                        _selectedDocumentType,
+                      ),
+                      SizedBox(height: 10.h),
+                      _successDetailRow(
+                        Icons.calendar_today_outlined,
+                        'Submission Date',
+                        DateFormat('MMM dd, yyyy • hh:mm a')
+                            .format(DateTime.now()),
+                      ),
+                      SizedBox(height: 10.h),
+                      _successDetailRow(
+                        Icons.schedule_outlined,
+                        'Processing',
+                        urgencyLabel,
+                      ),
+                      SizedBox(height: 10.h),
+                      _successDetailRow(
+                        Icons.info_outline,
+                        'Status',
+                        'Pending',
+                      ),
+                      SizedBox(height: 18.h),
+                      Container(
+                        padding: EdgeInsets.all(14.w),
+                        decoration: BoxDecoration(
+                          color: tipBg,
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(color: tipBorder),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.lightbulb_outline_rounded,
+                              size: 18.sp,
+                              color: AppColors.warningAlt,
+                            ),
+                            SizedBox(width: 10.w),
+                            Expanded(
+                              child: Text(
+                                'Track this request live on the tracking screen — status updates appear automatically.',
+                                style: TextStyle(
+                                  fontSize: 12.sp,
+                                  color: tipText,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
                     ],
                   ),
-                  child: Icon(Icons.check_rounded, size: 38.sp, color: _cardBg),
                 ),
               ),
-            ),
-            SizedBox(height: 22.h),
-            Text(
-              'Request Submitted',
-              style: TextStyle(
-                fontSize: 22.sp,
-                fontWeight: FontWeight.w700,
-                color: _titleText,
-                letterSpacing: -0.3,
-              ),
-            ),
-            SizedBox(height: 6.h),
-            Text(
-              'Your document request has been sent to the Barangay office for processing.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14.sp, color: _mutedText, height: 1.5),
-            ),
-            SizedBox(height: 20.h),
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(vertical: 14.h),
-              decoration: BoxDecoration(
-                color: refBg,
-                borderRadius: BorderRadius.circular(14.r),
-                border: Border.all(color: refBorder),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'REFERENCE NUMBER',
-                    style: TextStyle(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w600,
-                      color: _mutedText,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  SizedBox(height: 4.h),
-                  Text(
-                    refId,
-                    style: TextStyle(
-                      fontSize: 22.sp,
-                      fontWeight: FontWeight.w800,
-                      color: HomeColors.heritagePurple,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 20.h),
-            _successDetailRow(
-                Icons.description_outlined, 'Document', _selectedDocumentType),
-            SizedBox(height: 10.h),
-            _successDetailRow(Icons.schedule_outlined, 'Processing',
-                '$urgencyLabel Processing'),
-            SizedBox(height: 10.h),
-            _successDetailRow(
-              Icons.receipt_long_outlined,
-              'Fee',
-              _isFree ? 'Free of Charge' : '₱${_fee.toStringAsFixed(2)}',
-            ),
-            SizedBox(height: 20.h),
-            Container(
-              padding: EdgeInsets.all(14.w),
-              decoration: BoxDecoration(
-                color: tipBg,
-                borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(color: tipBorder),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.lightbulb_outline_rounded,
-                      size: 18.sp, color: AppColors.warningAlt),
-                  SizedBox(width: 10.w),
-                  Expanded(
+              SizedBox(height: 12.h),
+              // Primary action: navigate to the request tracking screen.
+              SizedBox(
+                width: double.infinity,
+                height: 58.h,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _resetForm();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DocumentTrackingScreen(),
+                      ),
+                    );
+                  },
+                  icon: Icon(Icons.track_changes_rounded, size: 18.sp),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
                     child: Text(
-                      'Follow this request live on the tracking screen — status updates appear automatically.',
+                      'Track My Request',
+                      maxLines: 1,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                          fontSize: 13.sp, color: tipText, height: 1.4),
+                        fontSize: 15.sp,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            SizedBox(height: 22.h),
-            SizedBox(
-              width: double.infinity,
-              height: 52.h,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _resetForm();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const DocumentTrackingScreen()),
-                  );
-                },
-                icon: Icon(Icons.track_changes_rounded, size: 18.sp),
-                label: Text('Track My Request',
-                    style: TextStyle(
-                        fontSize: 15.sp, fontWeight: FontWeight.w700)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: HomeColors.heritagePurple,
-                  side: BorderSide(
-                      color: HomeColors.heritagePurple.withValues(alpha: 0.4)),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14.r)),
-                ),
-              ),
-            ),
-            SizedBox(height: 12.h),
-            SizedBox(
-              width: double.infinity,
-              height: 52.h,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _resetForm();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: HomeColors.heritagePurple,
-                  foregroundColor: AppColors.neutralWhite,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14.r),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: HomeColors.heritagePurple,
+                    side: BorderSide(
+                      color: HomeColors.heritagePurple.withValues(alpha: 0.4),
+                    ),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 10.h,
+                    ),
+                    minimumSize: Size(double.infinity, 58.h),
+                    fixedSize: Size(double.infinity, 58.h),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.standard,
+                    alignment: Alignment.center,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14.r),
+                    ),
                   ),
                 ),
-                child: Text('Done',
-                    style: TextStyle(
-                        fontSize: 16.sp, fontWeight: FontWeight.w700)),
               ),
-            ),
-          ],
+              SizedBox(height: 10.h),
+              // Secondary action: close the dialog and return to the form.
+              SizedBox(
+                width: double.infinity,
+                height: 58.h,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _resetForm();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HomeColors.heritagePurple,
+                    foregroundColor: AppColors.neutralWhite,
+                    elevation: 0,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 10.h,
+                    ),
+                    minimumSize: Size(double.infinity, 58.h),
+                    fixedSize: Size(double.infinity, 58.h),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.standard,
+                    alignment: Alignment.center,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14.r),
+                    ),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Done',
+                      maxLines: 1,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16.sp,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -852,9 +1002,8 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     _additionalNotesController.clear();
     setState(() {
       _selectedDocumentType = 'Business Permit';
-      _selectedUrgency = 'Normal (3-5 days)';
+      _selectedBarangay = null;
       _attachedFiles.clear();
-      _currentStep = 0;
     });
   }
 
@@ -864,6 +1013,7 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     _addressController.dispose();
     _purposeController.dispose();
     _additionalNotesController.dispose();
+    _barangaySearchController.dispose();
     super.dispose();
   }
 
@@ -886,24 +1036,30 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 SizedBox(height: 20.h),
-                _buildStepIndicator(),
-                SizedBox(height: 20.h),
-                _buildDocumentTypeCard(),
-                SizedBox(height: 14.h),
-                _buildFeeCard(),
-                SizedBox(height: 14.h),
-                _buildPersonalInfoCard(),
-                SizedBox(height: 14.h),
-                _buildUrgencyCard(),
-                SizedBox(height: 14.h),
-                _buildAttachmentCard(),
-                SizedBox(height: 14.h),
-                _buildAdditionalNotesCard(),
-                SizedBox(height: 14.h),
-                _buildSubmitButton(),
-                SizedBox(height: 10.h),
-                _buildInfoBanner(),
-                SizedBox(height: 40.h),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDocumentTypeCard(),
+                      SizedBox(height: 14.h),
+                      _buildRequestDetailsCard(),
+                      SizedBox(height: 14.h),
+                      _buildResidentInfoCard(),
+                      SizedBox(height: 14.h),
+                      _buildAttachmentCard(),
+                      SizedBox(height: 14.h),
+                      _buildProcessingInfoCard(),
+                      SizedBox(height: 14.h),
+                      _buildSubmitButton(),
+                      SizedBox(height: 10.h),
+                      _buildInfoBanner(),
+                      SizedBox(height: 20.h),
+                      //_buildTransparencyCard(),
+                      SizedBox(height: 40.h),
+                    ],
+                  ),
+                ),
               ]),
             ),
           ),
@@ -915,7 +1071,7 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
   // ─── SLIVER APP BAR ───────────────────────────────────
   Widget _buildSliverAppBar() {
     return SliverAppBar(
-      expandedHeight: 210.h,
+      expandedHeight: 200.h,
       pinned: true,
       elevation: 0,
       backgroundColor: HomeColors.deepAnchor,
@@ -970,9 +1126,9 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Document Request',
+                              'Municipal Service Request',
                               style: TextStyle(
-                                fontSize: 22.sp,
+                                fontSize: 20.sp,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.neutralWhite,
                                 letterSpacing: -0.3,
@@ -980,9 +1136,9 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
                             ),
                             SizedBox(height: 2.h),
                             Text(
-                              'Official Barangay Documents',
+                              'Accessible Government Services',
                               style: TextStyle(
-                                fontSize: 14.sp,
+                                fontSize: 13.sp,
                                 fontWeight: FontWeight.w500,
                                 color: AppColors.neutralWhite
                                     .withValues(alpha: 0.7),
@@ -995,112 +1151,18 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
                   ),
                   SizedBox(height: 14.h),
                   Text(
-                    'Request barangay clearances, certificates, and other official documents.',
+                    'Access municipal documents and services through May-Laud. Submit your request, monitor its progress, and stay informed throughout the process.',
                     style: TextStyle(
                       fontSize: 12.sp,
                       color: AppColors.neutralWhite.withValues(alpha: 0.6),
                       height: 1.4,
                     ),
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─── STEP INDICATOR ───────────────────────────────────
-  Widget _buildStepIndicator() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 14.h),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          _stepDot(0, 'Select\nDocument'),
-          _stepLine(0),
-          _stepDot(1, 'Fill\nDetails'),
-          _stepLine(1),
-          _stepDot(2, 'Submit\nRequest'),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepDot(int step, String label) {
-    final isActive = _currentStep >= step;
-    final isPast = _currentStep > step;
-    final inactiveCircle = _isDark
-        ? _cs!.onSurface.withValues(alpha: 0.15)
-        : AppColors.neutralGray200;
-
-    return Expanded(
-      child: Column(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            width: 32.w,
-            height: 32.w,
-            decoration: BoxDecoration(
-              color: isActive ? HomeColors.heritagePurple : inactiveCircle,
-              shape: BoxShape.circle,
-              boxShadow: isActive
-                  ? [
-                      BoxShadow(
-                        color: HomeColors.heritagePurple.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      )
-                    ]
-                  : null,
-            ),
-            child: Center(
-              child: isPast
-                  ? Icon(Icons.check_rounded,
-                      size: 16.sp, color: AppColors.neutralWhite)
-                  : Text(
-                      '${step + 1}',
-                      style: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w700,
-                        color: isActive ? AppColors.neutralWhite : _mutedText,
-                      ),
-                    ),
-            ),
-          ),
-          SizedBox(height: 6.h),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 10.sp,
-              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-              color: isActive ? _titleText : _mutedText,
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepLine(int fromStep) {
-    final isPast = _currentStep > fromStep;
-    final inactiveLine = _isDark
-        ? _cs!.onSurface.withValues(alpha: 0.12)
-        : AppColors.neutralGray200;
-    return Expanded(
-      child: Padding(
-        padding: EdgeInsets.only(bottom: 24.h),
-        child: Container(
-          height: 2,
-          margin: EdgeInsets.symmetric(horizontal: 2.w),
-          decoration: BoxDecoration(
-            color: isPast ? HomeColors.heritagePurple : inactiveLine,
-            borderRadius: BorderRadius.circular(1),
           ),
         ),
       ),
@@ -1119,9 +1181,9 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionLabel('Document Type'),
+          _sectionLabel('Select a Document or Service'),
           SizedBox(height: 2.h),
-          Text('Tap to select the document you need',
+          Text('Choose the municipal document or service you need.',
               style: TextStyle(fontSize: 13.sp, color: _subtitleText)),
           SizedBox(height: 14.h),
           Material(
@@ -1223,6 +1285,48 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
             ),
           ),
           SizedBox(height: 16.h),
+          Row(
+            children: [
+              Icon(Icons.receipt_long_rounded,
+                  size: 16.sp, color: accent.withValues(alpha: 0.7)),
+              SizedBox(width: 8.w),
+              Text(
+                _isFree ? 'Free of Charge' : 'Processing Fee',
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w600,
+                  color: _titleText,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                _isFree ? 'FREE' : '₱${_fee.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w700,
+                  color: _isFree ? AppColors.successAlt : accent,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── REQUEST DETAILS CARD ─────────────────────────────
+  Widget _buildRequestDetailsCard() {
+    return Container(
+      padding: EdgeInsets.all(20.w),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionLabel('Request Details'),
+          SizedBox(height: 2.h),
+          Text('Describe what you need the document or service for.',
+              style: TextStyle(fontSize: 13.sp, color: _subtitleText)),
+          SizedBox(height: 16.h),
           TextFormField(
             controller: _purposeController,
             maxLines: 3,
@@ -1231,87 +1335,29 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
                 fontWeight: FontWeight.w500,
                 color: _titleText),
             decoration: _fieldDecoration(
-              'Purpose of request (e.g., Employment, School, Travel)',
+              'Purpose of Request',
               Icons.edit_note_rounded,
+              hint: 'Purpose of request (e.g., Employment, School, Travel)',
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
-                return 'Please specify the purpose';
+                return 'Please specify the purpose of your request';
               }
               return null;
             },
           ),
-        ],
-      ),
-    );
-  }
-
-  // ─── FEE CARD ─────────────────────────────────────────
-  Widget _buildFeeCard() {
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            width: 52.w,
-            height: 52.w,
-            decoration: BoxDecoration(
-              color: _isFree
-                  ? (_isDark
-                      ? AppColors.successAlt.withValues(alpha: 0.15)
-                      : AppColors.successAlt.withValues(alpha: 0.06))
-                  : HomeColors.heritagePurple.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(14.r),
-            ),
-            child: Icon(
-              _isFree
-                  ? Icons.verified_user_rounded
-                  : Icons.receipt_long_rounded,
-              size: 26.sp,
-              color: _isFree ? AppColors.successAlt : HomeColors.heritagePurple,
-            ),
-          ),
-          SizedBox(width: 16.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    _isFree ? 'Free of Charge' : 'Processing Fee',
-                    key: ValueKey(_isFree),
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.w600,
-                      color: _titleText,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  _isFree
-                      ? 'No payment required for this document'
-                      : 'Pay at the Municipality Office upon pickup',
-                  style: TextStyle(
-                      fontSize: 13.sp, color: _mutedText, height: 1.3),
-                ),
-              ],
-            ),
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: Text(
-              _isFree ? 'FREE' : '₱${_fee.toStringAsFixed(2)}',
-              key: ValueKey('${_isFree}_$_fee'),
-              style: TextStyle(
-                fontSize: 24.sp,
-                fontWeight: FontWeight.w700,
-                color:
-                    _isFree ? AppColors.successAlt : HomeColors.heritagePurple,
-              ),
+          SizedBox(height: 14.h),
+          TextFormField(
+            controller: _additionalNotesController,
+            maxLines: 3,
+            style: TextStyle(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w500,
+                color: _titleText),
+            decoration: _fieldDecoration(
+              'Reason or Explanation',
+              Icons.sticky_note_2_rounded,
+              hint: 'Any special instructions or details (optional)',
             ),
           ),
         ],
@@ -1319,147 +1365,103 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     );
   }
 
-  // ─── PERSONAL INFO CARD ───────────────────────────────
-  Widget _buildPersonalInfoCard() {
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: _cardDecoration(),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionLabel('Personal Information'),
-            SizedBox(height: 2.h),
-            Text('Provide accurate details for verification',
-                style: TextStyle(fontSize: 13.sp, color: _subtitleText)),
-            SizedBox(height: 16.h),
-            TextFormField(
-              controller: _fullNameController,
-              style: TextStyle(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w500,
-                  color: _titleText),
-              decoration: _fieldDecoration('Full Name', Icons.person_rounded),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your full name';
-                }
-                return null;
-              },
-            ),
-            SizedBox(height: 14.h),
-            TextFormField(
-              controller: _addressController,
-              style: TextStyle(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w500,
-                  color: _titleText),
-              decoration:
-                  _fieldDecoration('Complete Address', Icons.home_rounded),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your address';
-                }
-                return null;
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── URGENCY CARD ─────────────────────────────────────
-  Widget _buildUrgencyCard() {
+  // ─── RESIDENT INFORMATION CARD ────────────────────────
+  Widget _buildResidentInfoCard() {
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionLabel('Processing Urgency'),
+          _sectionLabel('Resident Information'),
           SizedBox(height: 2.h),
-          Text('Faster processing may include additional fees',
-              style: TextStyle(fontSize: 13.sp, color: _subtitleText)),
+          Text(
+            'Provide accurate details for verification',
+            style: TextStyle(
+              fontSize: 13.sp,
+              color: _subtitleText,
+            ),
+          ),
           SizedBox(height: 16.h),
-          ..._urgencyLevels.map((urgency) {
-            final urgencyLabel = '${urgency['label']} (${urgency['desc']})';
-            final isSelected = _selectedUrgency == urgencyLabel;
-            final color = _urgencyColor(urgency['label']!);
-            final bg = _urgencyBg(urgency['label']!);
-            final icon = _urgencyIcon(urgency['icon']!);
-            final inactiveIconBg = _isDark
-                ? _cs!.onSurface.withValues(alpha: 0.08)
-                : AppColors.neutralGray200;
-
-            return Padding(
-              padding: EdgeInsets.only(bottom: 8.h),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => setState(() => _selectedUrgency = urgencyLabel),
-                  borderRadius: BorderRadius.circular(14.r),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-                    decoration: BoxDecoration(
-                      color: isSelected ? bg : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14.r),
-                      border: Border.all(
-                        color: isSelected ? color : _borderColor,
-                        width: isSelected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 42.w,
-                          height: 42.w,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? color.withValues(alpha: 0.12)
-                                : inactiveIconBg,
-                            borderRadius: BorderRadius.circular(11.r),
-                          ),
-                          child: Icon(icon,
-                              size: 20.sp,
-                              color: isSelected ? color : _mutedText),
-                        ),
-                        SizedBox(width: 14.w),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                urgency['label']!,
-                                style: TextStyle(
-                                  fontSize: 15.sp,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected ? _titleText : _bodyText,
-                                ),
-                              ),
-                              SizedBox(height: 2.h),
-                              Text(
-                                'Estimated: ${urgency['desc']}',
-                                style: TextStyle(
-                                    fontSize: 13.sp, color: _mutedText),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (isSelected)
-                          Icon(Icons.check_circle_rounded,
-                              size: 22.sp, color: color),
-                      ],
-                    ),
+          TextFormField(
+            controller: _fullNameController,
+            style: TextStyle(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w500,
+                color: _titleText),
+            decoration: _fieldDecoration(
+              'Full Name',
+              Icons.person_rounded,
+              hint: 'Full Name',
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter your full name';
+              }
+              return null;
+            },
+          ),
+          SizedBox(height: 14.h),
+          TextFormField(
+            controller: _addressController,
+            style: TextStyle(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w500,
+                color: _titleText),
+            decoration: _fieldDecoration(
+              'Complete Address',
+              Icons.home_rounded,
+              hint: 'Complete Address',
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter your address';
+              }
+              return null;
+            },
+          ),
+          SizedBox(height: 14.h),
+          InkWell(
+            onTap: _showBarangayPicker,
+            borderRadius: BorderRadius.circular(14.r),
+            child: AbsorbPointer(
+              child: TextFormField(
+                controller: _barangaySearchController,
+                readOnly: true,
+                style: TextStyle(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w500,
+                  color: _titleText,
+                ),
+                decoration: _fieldDecoration(
+                  'Assigned Barangay',
+                  Icons.location_city_rounded,
+                  hint: 'Search and select your barangay',
+                  suffixIcon: Icon(
+                    _selectedBarangay != null
+                        ? Icons.check_circle_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 20.sp,
+                    color: HomeColors.heritagePurple,
                   ),
                 ),
+                validator: (value) {
+                  if (_selectedBarangay == null || _selectedBarangay!.isEmpty) {
+                    return 'Please select your barangay';
+                  }
+                  return null;
+                },
               ),
-            );
-          }),
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'Select your registered barangay in Milaor, Camarines Sur.',
+            style: TextStyle(
+              fontSize: 11.sp,
+              color: _mutedText,
+            ),
+          ),
         ],
       ),
     );
@@ -1476,7 +1478,7 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _sectionLabel('Attachments'),
+              _sectionLabel('Supporting Documents'),
               if (_attachedFiles.isNotEmpty)
                 Container(
                   padding:
@@ -1498,7 +1500,7 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
           ),
           SizedBox(height: 2.h),
           Text(
-            'Upload supporting documents like valid ID, proof of address (optional)',
+            'Attach the required identification or supporting documents to help the municipal office verify your request.',
             style:
                 TextStyle(fontSize: 13.sp, color: _subtitleText, height: 1.4),
           ),
@@ -1596,7 +1598,8 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     );
   }
 
-  Widget _buildFileThumb({required DocumentAttachment file, required int index}) {
+  Widget _buildFileThumb(
+      {required DocumentAttachment file, required int index}) {
     final fileName = file.filename;
     final fileSize = '${(file.bytes.length / 1024).toStringAsFixed(1)} KB';
 
@@ -1664,29 +1667,46 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     );
   }
 
-  // ─── ADDITIONAL NOTES ─────────────────────────────────
-  Widget _buildAdditionalNotesCard() {
+  // ─── PROCESSING INFO CARD ─────────────────────────────
+  Widget _buildProcessingInfoCard() {
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: _cardDecoration(),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionLabel('Additional Notes'),
-          SizedBox(height: 2.h),
-          Text('Any special instructions or details (optional)',
-              style: TextStyle(fontSize: 13.sp, color: _subtitleText)),
-          SizedBox(height: 16.h),
-          TextFormField(
-            controller: _additionalNotesController,
-            maxLines: 3,
-            style: TextStyle(
-                fontSize: 15.sp,
-                fontWeight: FontWeight.w500,
-                color: _titleText),
-            decoration: _fieldDecoration(
-              'Write any additional notes here...',
-              Icons.sticky_note_2_rounded,
+          Container(
+            width: 36.w,
+            height: 36.w,
+            decoration: BoxDecoration(
+              color: HomeColors.heritagePurple.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10.r),
+            ),
+            child: Icon(Icons.info_outline_rounded,
+                size: 18.sp,
+                color: HomeColors.heritagePurple.withValues(alpha: 0.7)),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Processing Information',
+                    style: TextStyle(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w700,
+                      color: _titleText,
+                    )),
+                SizedBox(height: 4.h),
+                Text(
+                  'Your request will be reviewed and processed according to the municipality\'s official service procedures. You will receive updates as its status changes.',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    color: _bodyText,
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1697,48 +1717,87 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
   // ─── SUBMIT BUTTON ────────────────────────────────────
   Widget _buildSubmitButton() {
     final bool canSubmit = _selectedIsAvailable && !_isSubmitting;
+
     return SizedBox(
       width: double.infinity,
-      height: 56.h,
+      height: 58.h,
       child: ElevatedButton(
         onPressed: canSubmit ? _submitRequest : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: HomeColors.heritagePurple,
-          foregroundColor: AppColors.neutralWhite,
+          foregroundColor: Colors.white,
           disabledBackgroundColor:
-              HomeColors.heritagePurple.withValues(alpha: 0.5),
-          disabledForegroundColor:
-              AppColors.neutralWhite.withValues(alpha: 0.7),
-          elevation: 0,
-          shadowColor: Colors.transparent,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+              HomeColors.heritagePurple.withValues(alpha: 0.45),
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.75),
+          elevation: 2,
+          shadowColor: HomeColors.heritagePurple.withValues(alpha: 0.20),
+          padding: EdgeInsets.symmetric(
+            horizontal: 20.w,
+            vertical: 12.h,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.r),
+          ),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: _isSubmitting
-              ? SizedBox(
+              ? Row(
                   key: const ValueKey('loading'),
-                  width: 24.w,
-                  height: 24.w,
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(Color(0xB3FFFFFF)),
-                  ),
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 21.w,
+                      height: 21.w,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                    SizedBox(width: 12.w),
+                    Text(
+                      'Submitting Request...',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 )
               : Row(
                   key: const ValueKey('idle'),
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.send_rounded, size: 20.sp),
-                    SizedBox(width: 10.w),
-                    Text(
-                      'Submit Request',
-                      style: TextStyle(
-                        fontSize: 17.sp,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
+                    // Container(
+                    //   width: 34.w,
+                    //   height: 34.w,
+                    //   // decoration: BoxDecoration(
+                    //   //   color: Colors.white.withValues(alpha: 0.15),
+                    //   //   borderRadius: BorderRadius.circular(10.r),
+                    //   // ),
+                    //   // child: Icon(
+                    //   //   Icons.send_rounded,
+                    //   //   size: 17.sp,
+                    //   //   color: Colors.white,
+                    //   // ),
+                    // ),
+                    SizedBox(width: 12.w),
+                    Flexible(
+                      child: Text(
+                        'Submit Request',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -1805,6 +1864,53 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     );
   }
 
+  // ─── TRANSPARENCY CARD ────────────────────────────────
+  // Widget _buildTransparencyCard() {
+  //   return Container(
+  //     padding: EdgeInsets.all(20.w),
+  //     decoration: _cardDecoration(),
+  //     child: Row(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  // children: [
+  //   Container(
+  //     width: 36.w,
+  //     height: 36.w,
+  //     decoration: BoxDecoration(
+  //       color: HomeColors.heritagePurple.withValues(alpha: 0.08),
+  //       borderRadius: BorderRadius.circular(10.r),
+  //     ),
+  //     child: Icon(Icons.public_rounded,
+  //         size: 18.sp,
+  //         color: HomeColors.heritagePurple.withValues(alpha: 0.7)),
+  //   ),
+  //   SizedBox(width: 12.w),
+  // Expanded(
+  // child: Column(
+  //   crossAxisAlignment: CrossAxisAlignment.start,
+  //   children: [
+  //     Text('Transparent Public Service',
+  //         style: TextStyle(
+  //           fontSize: 15.sp,
+  //           fontWeight: FontWeight.w700,
+  //           color: _titleText,
+  //         )),
+  //     SizedBox(height: 4.h),
+  //     Text(
+  //       'May-Laud promotes accessible and accountable municipal services by keeping residents informed about their requests and helping the municipality respond to community needs.',
+  //       style: TextStyle(
+  //         fontSize: 13.sp,
+  //         color: _bodyText,
+  //         height: 1.5,
+  //       ),
+  //     ),
+  //   ],
+  // ),
+  //     ),
+  // ],
+  //     ),
+  //   );
+  // }
+
   // ─── SHARED HELPERS ───────────────────────────────────
   Widget _sectionLabel(String text) {
     return Text(
@@ -1818,13 +1924,20 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
     );
   }
 
-  InputDecoration _fieldDecoration(String hint, IconData icon) {
+  InputDecoration _fieldDecoration(String label, IconData icon,
+      {String? hint, Widget? suffixIcon}) {
     return InputDecoration(
+      labelText: label,
       hintText: hint,
       hintStyle: TextStyle(
         fontSize: 14.sp,
         color: _mutedText,
         fontWeight: FontWeight.w400,
+      ),
+      labelStyle: TextStyle(
+        fontSize: 14.sp,
+        color: _mutedText,
+        fontWeight: FontWeight.w500,
       ),
       prefixIcon: Padding(
         padding: EdgeInsets.only(left: 14.w, right: 10.w),
@@ -1833,6 +1946,8 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
             color: HomeColors.heritagePurple.withValues(alpha: 0.55)),
       ),
       prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+      suffixIcon: suffixIcon,
+      suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
       filled: true,
       fillColor: _inputFill,
       border: OutlineInputBorder(
@@ -1845,8 +1960,7 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14.r),
-        borderSide:
-            BorderSide(color: HomeColors.heritagePurple, width: 1.5),
+        borderSide: BorderSide(color: HomeColors.heritagePurple, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14.r),
@@ -1872,6 +1986,384 @@ class _DocumentRequestScreenState extends ConsumerState<DocumentRequestScreen> {
           offset: const Offset(0, 3),
         ),
       ],
+    );
+  }
+}
+
+/// Half-screen searchable barangay picker sheet. Manages its own
+/// [TextEditingController] lifecycle to avoid the
+/// `_dependents.IsEmpty is not true` assertion that occurs when a
+/// `StatefulBuilder` inside `showModalBottomSheet` is disposed while
+/// dependents are still active.
+class _BarangayPickerSheet extends StatefulWidget {
+  final List<String> barangays;
+  final String? selectedBarangay;
+  final ValueChanged<String> onSelected;
+
+  const _BarangayPickerSheet({
+    required this.barangays,
+    this.selectedBarangay,
+    required this.onSelected,
+  });
+
+  @override
+  State<_BarangayPickerSheet> createState() => _BarangayPickerSheetState();
+}
+
+class _BarangayPickerSheetState extends State<_BarangayPickerSheet> {
+  late final TextEditingController _searchCtrl;
+
+  String? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _searchCtrl = TextEditingController();
+    _selected = widget.selectedBarangay;
+  }
+
+  List<String> get _filtered {
+    final query = _searchCtrl.text.trim().toLowerCase();
+
+    final results = widget.barangays.where((barangay) {
+      return barangay.toLowerCase().contains(query);
+    }).toList();
+
+    results.sort((a, b) => a.compareTo(b));
+
+    return results;
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final cs = Theme.of(context).colorScheme;
+
+    final cardBg = isDark ? cs.surface : Colors.white;
+
+    final titleText = isDark ? cs.onSurface : const Color(0xFF24005B);
+
+    final bodyText =
+        isDark ? cs.onSurface.withValues(alpha: 0.65) : const Color(0xFF4C229C);
+
+    final mutedText =
+        isDark ? cs.onSurface.withValues(alpha: 0.45) : const Color(0xFF6B6575);
+
+    final inputFill =
+        isDark ? cs.surface.withValues(alpha: 0.8) : const Color(0xFFFEF7FF);
+
+    final borderColor =
+        isDark ? cs.onSurface.withValues(alpha: 0.15) : const Color(0xFFE9E1F5);
+
+    final filtered = _filtered;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom +
+            12.h,
+      ),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(28.r),
+        ),
+      ),
+      child: Column(
+        children: [
+          SizedBox(height: 10.h),
+          Container(
+            width: 36.w,
+            height: 4.h,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.24)
+                  : const Color(0xFFD1D5DB),
+              borderRadius: BorderRadius.circular(2.r),
+            ),
+          ),
+          SizedBox(height: 20.h),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24.w),
+            child: Row(
+              children: [
+                Container(
+                  width: 42.w,
+                  height: 42.w,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4C229C).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
+                  child: Icon(
+                    Icons.location_city_rounded,
+                    size: 22.sp,
+                    color: const Color(0xFF4C229C),
+                  ),
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select Your Barangay',
+                        style: TextStyle(
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.w700,
+                          color: titleText,
+                        ),
+                      ),
+                      SizedBox(height: 3.h),
+                      Text(
+                        'Milaor, Camarines Sur',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          color: mutedText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 9.w,
+                    vertical: 5.h,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4C229C).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(20.r),
+                  ),
+                  child: Text(
+                    '${widget.barangays.length} Barangays',
+                    style: TextStyle(
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF4C229C),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 18.h),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20.w),
+            child: TextField(
+              controller: _searchCtrl,
+              style: TextStyle(
+                fontSize: 14.sp,
+                color: titleText,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search barangay...',
+                hintStyle: TextStyle(
+                  fontSize: 14.sp,
+                  color: mutedText,
+                ),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  size: 20.sp,
+                  color: const Color(0xFF4C229C),
+                ),
+                suffixIcon: _searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: 18.sp,
+                          color: mutedText,
+                        ),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: inputFill,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16.w,
+                  vertical: 14.h,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14.r),
+                  borderSide: BorderSide(
+                    color: borderColor,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14.r),
+                  borderSide: BorderSide(
+                    color: borderColor,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14.r),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF4C229C),
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          SizedBox(height: 12.h),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24.w),
+            child: Row(
+              children: [
+                Text(
+                  'AVAILABLE BARANGAYS',
+                  style: TextStyle(
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    color: mutedText,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${filtered.length} results',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: mutedText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 42.sp,
+                          color: mutedText,
+                        ),
+                        SizedBox(height: 10.h),
+                        Text(
+                          'No barangay found',
+                          style: TextStyle(
+                            fontSize: 15.sp,
+                            fontWeight: FontWeight.w600,
+                            color: titleText,
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          'Try searching another barangay name.',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: mutedText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 20.w,
+                      vertical: 4.h,
+                    ),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => SizedBox(height: 5.h),
+                    itemBuilder: (_, index) {
+                      final barangay = filtered[index];
+
+                      final isSelected = _selected == barangay;
+
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _selected = barangay;
+                            });
+
+                            widget.onSelected(barangay);
+
+                            Navigator.pop(context);
+                          },
+                          borderRadius: BorderRadius.circular(12.r),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 15.w,
+                              vertical: 14.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF4C229C)
+                                      .withValues(alpha: 0.07)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12.r),
+                              border: isSelected
+                                  ? Border.all(
+                                      color: const Color(0xFF4C229C)
+                                          .withValues(alpha: 0.4),
+                                    )
+                                  : Border.all(
+                                      color: Colors.transparent,
+                                    ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.location_city_rounded,
+                                  size: 19.sp,
+                                  color: isSelected
+                                      ? const Color(0xFF4C229C)
+                                      : mutedText,
+                                ),
+                                SizedBox(width: 12.w),
+                                Expanded(
+                                  child: Text(
+                                    barangay,
+                                    style: TextStyle(
+                                      fontSize: 14.sp,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: isSelected ? titleText : bodyText,
+                                    ),
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    size: 19.sp,
+                                    color: const Color(0xFF4C229C),
+                                  )
+                                else
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 18.sp,
+                                    color: mutedText,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

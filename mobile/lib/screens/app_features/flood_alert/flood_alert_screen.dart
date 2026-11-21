@@ -1,18 +1,19 @@
-// ignore_for_file: unused_field, deprecated_member_use
+// ignore_for_file: unused_element, unused_field, deprecated_member_use
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+
 import '../../../theme/app_theme.dart';
-import '../../../services/ai_triage_service.dart';
-// 7-day rain forecast (Open-Meteo). This feature deliberately reports
-// rainfall (mm) + probability only — it never fabricates a river-gauge
-// water level in meters (see weather_risk_models.dart's design contract).
-import '../../../features/rain_forecast/repository/weather_repository.dart';
+// 7-day rain forecast (Open-Meteo) via the shared rain forecast provider —
+// single data layer for both the Flood Alert and Rain Forecast screens.
+import '../../../providers/rain_forecast_provider.dart';
 import '../../../features/rain_forecast/models/weather_data_models.dart';
-import '../../../features/rain_forecast/types.dart';
+import '../../../features/rain_forecast/risk/rain_risk_classifier.dart';
 import '../rain_forecast/rain_forecast_screen.dart';
 
 // ─── BRAND PALETTE — delegates to AppColors (single source of truth) ───
@@ -46,14 +47,14 @@ class FloodColors {
   );
 }
 
-class FloodAlertScreen extends StatefulWidget {
+class FloodAlertScreen extends ConsumerStatefulWidget {
   const FloodAlertScreen({super.key});
 
   @override
-  State<FloodAlertScreen> createState() => _FloodAlertScreenState();
+  ConsumerState<FloodAlertScreen> createState() => _FloodAlertScreenState();
 }
 
-class _FloodAlertScreenState extends State<FloodAlertScreen> {
+class _FloodAlertScreenState extends ConsumerState<FloodAlertScreen> {
   bool _isDark = false;
   ColorScheme? _cs;
 
@@ -67,25 +68,6 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
   Color get _mutedText => _colors.textMuted;
 
   final RefreshController _refreshController = RefreshController();
-  final AiTriageService _ai = AiTriageService();
-
-  // Live data from your weather API (see api.py's GET /weather/rain-risk).
-  // Null while loading, or if the backend couldn't be reached / hasn't
-  // got OPENWEATHER_API_KEY configured — _buildHeroStatusCard() and
-  // _buildForecastSection() below show an honest "unavailable" state
-  // rather than pretending there's a value.
-  RainRiskResult? _rainRisk;
-  bool _isLoadingRainRisk = true;
-
-  // 7-day daily rain forecast from Open-Meteo (see WeatherRepository). This
-  // powers the "Rain Forecast (7-Day water-level outlook)" panel below.
-  // Independent of the ML backend, so it still renders even when the
-  // /weather/rain-risk endpoint is unavailable. Null while loading or if
-  // Open-Meteo couldn't be reached — _buildRainForecastSection() shows an
-  // honest loading/unavailable state rather than invented numbers.
-  final WeatherRepository _weatherRepo = const WeatherRepository();
-  WeatherForecastData? _forecast;
-  bool _isLoadingForecast = true;
 
   // NOTE — _alerts and _safetyTips below are still placeholder/mock
   // data. Nothing in api.py provides per-station river-monitoring
@@ -98,31 +80,58 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
   void initState() {
     super.initState();
     _initMockData();
-    _fetchRainRisk();
-    _fetchForecast();
   }
 
-  Future<void> _fetchRainRisk() async {
-    if (mounted) setState(() => _isLoadingRainRisk = true);
-    final result = await _ai.getRainRisk();
-    if (!mounted) return;
-    setState(() {
-      _rainRisk = result;
-      _isLoadingRainRisk = false;
-    });
+  /// Sums hourly precipitation (mm) for forecast intervals within the next
+  /// 12 hours from now. Returns null when there are no usable hourly records.
+  double? _next12hRainfall(List<WeatherHour> hourly) {
+    final now = DateTime.now();
+    final cutoff = now.add(const Duration(hours: 12));
+    double sum = 0.0;
+    var count = 0;
+    for (final h in hourly) {
+      final t = DateTime.tryParse(h.time);
+      if (t == null) continue;
+      if (t.isAfter(now) && t.isBefore(cutoff)) {
+        sum += (h.precipitationMm ?? h.rainMm ?? h.showersMm ?? 0.0);
+        count += 1;
+      }
+    }
+    return count > 0 ? sum : null;
   }
 
-  /// Pulls the 7-day daily rain forecast for the assigned Milaor location.
-  /// Returns null on any failure (offline, no coordinates) — the UI then
-  /// shows an honest "unavailable" state, never placeholder values.
-  Future<void> _fetchForecast() async {
-    if (mounted) setState(() => _isLoadingForecast = true);
-    final data = await _weatherRepo.fetchForecast(assignedLocation);
-    if (!mounted) return;
-    setState(() {
-      _forecast = data;
-      _isLoadingForecast = false;
-    });
+  /// Risk classification label for the 7-day daily outlook, or null when no
+  /// daily data is available.
+  String? _riskLabel(WeatherForecastData? data) {
+    if (data == null || data.daily.isEmpty) return null;
+    final rule = RainRiskClassifier.classifyRainOutlook(
+      daily: data.daily,
+      location: data.location,
+    );
+    return rule.label;
+  }
+
+  /// Recommended action text derived from the forecast risk label — never
+  /// presented as an official PAGASA warning.
+  String _recommendedAction(String? label) {
+    if (label == null) return 'Unable to assess rain outlook right now.';
+    final l = label.toLowerCase();
+    if (l.contains('severe')) {
+      return 'Heavy rainfall expected over several days; elevated runoff and flash-flood potential. Follow official alerts.';
+    }
+    if (l.contains('high')) {
+      return 'Heavy rainfall expected; elevated runoff and flash-flood potential. Monitor official advisories.';
+    }
+    if (l.contains('moderate')) {
+      return 'Moderate rainfall expected; watch low-lying areas and small streams.';
+    }
+    if (l.contains('light') || l.contains('low') || l.contains('isolated')) {
+      return 'Light rain possible on a few days; not expected to cause runoff issues.';
+    }
+    if (l.contains('unavailable') || l.contains('no measurable')) {
+      return 'No measurable rain expected in the next 7 days.';
+    }
+    return 'Monitor official weather updates.';
   }
 
   void _initMockData() {
@@ -197,17 +206,25 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
   }
 
   void _onRefresh() async {
-    await Future.wait([
-      _fetchRainRisk(),
-      _fetchForecast(),
-    ]);
-    _refreshController.refreshCompleted();
+    await ref.read(rainForecastProvider.notifier).refresh();
+    if (mounted) _refreshController.refreshCompleted();
   }
 
   @override
   Widget build(BuildContext context) {
     _isDark = Theme.of(context).brightness == Brightness.dark;
     _cs = Theme.of(context).colorScheme;
+
+    final state = ref.watch(rainForecastProvider);
+    final data = state.data;
+
+    final next12hRain = _next12hRainfall(data?.hourly ?? const []);
+    final riskLabel = _riskLabel(data);
+    final evacuationAdvisory = riskLabel != null &&
+        (riskLabel.toLowerCase().contains('severe') ||
+            riskLabel.toLowerCase().contains('high'));
+    final checkedAt = state.lastUpdated;
+
     return Scaffold(
       backgroundColor: _scaffoldBg,
       body: SmartRefresher(
@@ -232,15 +249,6 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
                   _buildRainForecastSection(),
                   SizedBox(height: 24.h),
                   _buildForecastSection(),
-                  SizedBox(height: 24.h),
-                  _buildSectionHeader(
-                      'Area Flood Alerts', Icons.location_on_rounded),
-                  SizedBox(height: 12.h),
-                  ..._alerts.asMap().entries.map(
-                      (e) => _buildAlertCard(e.value, e.key).animate().fadeIn(
-                            duration: 400.ms,
-                            delay: (100 * e.key).ms,
-                          )),
                   SizedBox(height: 24.h),
                   _buildSectionHeader(
                       'Safety Information', Icons.info_outline_rounded),
@@ -341,28 +349,54 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
   // shows a loading/unavailable state honestly instead of a fake number
   // when that hasn't succeeded yet.
   Widget _buildHeroStatusCard() {
-    if (_isLoadingRainRisk) {
+    final status = ref.read(rainForecastProvider).status;
+    final hasData = ref.read(rainForecastProvider).hasData;
+
+    if ((status == RainForecastStatus.initial ||
+            status == RainForecastStatus.loading) &&
+        !hasData) {
       return _buildHeroPlaceholder(
         icon: Icons.cloud_sync_rounded,
         message: 'Checking live rain forecast…',
         showSpinner: true,
       );
     }
-    final rainRisk = _rainRisk;
-    if (rainRisk == null) {
+
+    // Offline with no cached data at all.
+    if (status == RainForecastStatus.offline && !hasData) {
       return _buildHeroPlaceholder(
         icon: Icons.cloud_off_rounded,
-        message: 'Live rain forecast unavailable right now.\n'
-            'Make sure the triage API is running and OPENWEATHER_API_KEY is configured.',
+        message: 'No internet connection and no cached forecast.\n'
+            'Please check your connection or monitor official PAGASA advisories.',
         showSpinner: false,
       );
     }
 
-    final statusText = rainRisk.floodRisk;
-    // 50mm/12h is api.py's own "Severe" threshold (get_rain_forecast()) —
-    // reused here so the gauge fills at the same point the backend
-    // itself calls the situation severe.
-    final percentage = (rainRisk.expectedRainMmNext12h / 50).clamp(0.0, 1.0);
+    // Error with no cached data.
+    if (status == RainForecastStatus.error && !hasData) {
+      final msg =
+          ref.read(rainForecastProvider).message ?? 'Unable to load forecast.';
+      return _buildHeroPlaceholder(
+        icon: Icons.error_outline_rounded,
+        message: msg,
+        showSpinner: false,
+      );
+    }
+
+    final data = ref.read(rainForecastProvider).data;
+    if (data == null) {
+      return _buildHeroPlaceholder(
+        icon: Icons.cloud_off_rounded,
+        message: 'Live rain forecast unavailable right now.\n'
+            'Please monitor official PAGASA weather advisories.',
+        showSpinner: false,
+      );
+    }
+
+    final next12hRain = _next12hRainfall(data.hourly);
+    final riskLabel = _riskLabel(data);
+    final statusText = riskLabel ?? 'Unavailable';
+    final percentage = ((next12hRain ?? 0.0) / 50).clamp(0.0, 1.0);
     final statusColor = _riskColor(statusText);
     final glowColor = statusColor.withValues(alpha: 0.3);
     final statusIcon = _riskIcon(statusText);
@@ -444,7 +478,7 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '${rainRisk.expectedRainMmNext12h.toStringAsFixed(0)}mm',
+                      '${(next12hRain ?? 0.0).toStringAsFixed(0)}mm',
                       style: GoogleFonts.poppins(
                         fontSize: 38.sp,
                         fontWeight: FontWeight.w800,
@@ -454,7 +488,7 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
                     ),
                     SizedBox(height: 2.h),
                     Text(
-                      'expected, next 12h',
+                      'expected, next 12h (forecast)',
                       style: GoogleFonts.inter(
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w500,
@@ -497,7 +531,7 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
                 SizedBox(width: 10.w),
                 Expanded(
                   child: Text(
-                    rainRisk.recommendedAction,
+                    _recommendedAction(statusText),
                     style: GoogleFonts.inter(
                       fontSize: 14.sp,
                       fontWeight: FontWeight.w600,
@@ -559,34 +593,34 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
   }
 
   // ─── QUICK STATS ROW ───────────────────────────────────
-  // FIX — 'Trend' used to be a fabricated 'stable' string with nothing
-  // behind it; api.py doesn't provide a trend either, so this now shows
-  // the one thing it DOES provide that the hero card doesn't already
-  // cover — the evacuation advisory flag. 'Rainfall' and 'Last Update'
-  // are now the real values from _rainRisk instead of hardcoded ones.
   Widget _buildQuickStatsRow() {
-    final rainRisk = _rainRisk;
+    final data = ref.read(rainForecastProvider).data;
+    final next12hRain = _next12hRainfall(data?.hourly ?? const []);
+    final riskLabel = _riskLabel(data);
+    final evacuationAdvisory = riskLabel != null &&
+        (riskLabel.toLowerCase().contains('severe') ||
+            riskLabel.toLowerCase().contains('high'));
+    final checkedAt = ref.read(rainForecastProvider).lastUpdated;
     return Row(
       children: [
         Expanded(
             child: _buildStatCard(
-          icon: rainRisk?.evacuationAdvisory == true
+          icon: evacuationAdvisory
               ? Icons.directions_run_rounded
               : Icons.home_rounded,
           label: 'Advisory',
-          value: rainRisk == null
+          value: data == null
               ? '—'
-              : (rainRisk.evacuationAdvisory ? 'EVACUATE' : 'STAY PUT'),
-          color: rainRisk?.evacuationAdvisory == true
-              ? FloodColors.danger
-              : FloodColors.riverFlow,
+              : (evacuationAdvisory ? 'EVACUATE' : 'STAY PUT'),
+          color:
+              evacuationAdvisory ? FloodColors.danger : FloodColors.riverFlow,
         )),
         SizedBox(width: 12.w),
         Expanded(
             child: _buildStatCard(
           icon: Icons.access_time_rounded,
           label: 'Checked',
-          value: rainRisk == null ? '—' : _formatTime(rainRisk.checkedAt),
+          value: checkedAt == null ? '—' : _formatTime(checkedAt),
           color: FloodColors.heritagePurple,
         )),
         SizedBox(width: 12.w),
@@ -594,16 +628,74 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
             child: _buildStatCard(
           icon: Icons.water_drop_rounded,
           label: 'Rainfall (12h)',
-          value: rainRisk == null
-              ? '—'
-              : '${rainRisk.expectedRainMmNext12h.toStringAsFixed(0)}mm',
+          value:
+              next12hRain == null ? '—' : '${next12hRain.toStringAsFixed(0)}mm',
           color: const Color(0xFF0EA5E9),
         )),
       ],
     );
   }
 
+  // ─── RAIN FORECAST SECTION ─────────────────────────────────
+  // Data-driven section powered by the shared rain forecast provider.
+  // Shows forecast precipitation (not physical rain-gauge measurements)
+  // with an honest fallback when data is unavailable.
   Widget _buildRainForecastSection() {
+    final state = ref.watch(rainForecastProvider);
+    final data = state.data;
+    final status = state.status;
+    final hasData = state.hasData;
+
+    // Loading with no data yet.
+    if ((status == RainForecastStatus.initial ||
+            status == RainForecastStatus.loading) &&
+        !hasData) {
+      return _buildRainForecastPlaceholder(
+        message: 'Loading rain forecast…',
+        showSpinner: true,
+      );
+    }
+
+    // Offline with cached data — show it but mark as offline.
+    if (status == RainForecastStatus.offline && hasData && data != null) {
+      return _buildRainForecastContent(data, offline: true);
+    }
+
+    // Offline with no data.
+    if (status == RainForecastStatus.offline && !hasData) {
+      return _buildRainForecastPlaceholder(
+        message: 'No internet connection and no cached forecast.\n'
+            'Please check your connection or monitor official PAGASA weather advisories.',
+        showSpinner: false,
+      );
+    }
+
+    // Error with no data.
+    if (status == RainForecastStatus.error && !hasData) {
+      return _buildRainForecastPlaceholder(
+        message: state.message ??
+            'Unable to load forecast.\n'
+                'Please monitor official PAGASA weather advisories.',
+        showSpinner: false,
+      );
+    }
+
+    // No data at all.
+    if (data == null) {
+      return _buildRainForecastPlaceholder(
+        message: 'Live rain forecast unavailable right now.\n'
+            'Please monitor official PAGASA weather advisories.',
+        showSpinner: false,
+      );
+    }
+
+    return _buildRainForecastContent(data, offline: false);
+  }
+
+  Widget _buildRainForecastPlaceholder({
+    required String message,
+    required bool showSpinner,
+  }) {
     return InkWell(
       onTap: () => Navigator.push(
         context,
@@ -685,23 +777,233 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
                 color: const Color(0xFFF7F3FD),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Color(0xFF643EB5),
-                    size: 22,
-                  ),
-                  SizedBox(width: 10),
+                  if (showSpinner)
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            const Color(0xFF643EB5)),
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.info_outline,
+                      color: Color(0xFF643EB5),
+                      size: 22,
+                    ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Live rainfall data is not connected yet. '
-                      'Please monitor official PAGASA weather advisories.',
-                      style: TextStyle(
+                      message,
+                      style: const TextStyle(
                         fontSize: 13,
                         height: 1.5,
                         color: Color(0xFF4C229C),
                       ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRainForecastContent(WeatherForecastData data,
+      {required bool offline}) {
+    final next12hRain = _next12hRainfall(data.hourly);
+    final riskLabel = _riskLabel(data);
+    final lastUpdated = ref.read(rainForecastProvider).lastUpdated;
+    final updatedText = lastUpdated == null
+        ? 'Updating...'
+        : 'Updated ${DateFormat('MMM d, h:mm a').format(lastUpdated)}';
+
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const RainForecastScreen()),
+      ),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFE9E1F5),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloudy_snowing,
+                  color: Color(0xFF643EB5),
+                  size: 26,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Rain Forecast',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF24005B),
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1EBFC),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    offline ? 'Offline' : 'Forecast',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF643EB5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Monitor rainfall conditions to help you prepare for possible flooding.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: Color(0xFF6B6575),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F3FD),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Next 12h rainfall (forecast)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4C229C),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        next12hRain == null
+                            ? '—'
+                            : '${next12hRain.toStringAsFixed(1)} mm',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4C229C),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Rainfall outlook',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4C229C),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          riskLabel ?? 'Unavailable',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _riskColor(riskLabel ?? 'low'),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Last updated',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4C229C),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        updatedText,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4C229C),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                  if (offline) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Showing cached data — connection unavailable.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFF4C229C),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Values are Open-Meteo forecast model estimates for the area — '
+                    'not physical rain-gauge measurements. Monitor official PAGASA advisories.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      color: Color(0xFF4C229C),
                     ),
                   ),
                 ],
@@ -774,10 +1076,15 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
   // badge when relevant, and the backend's own disclaimer note — instead
   // of pretending to have forecast granularity that doesn't exist.
   Widget _buildForecastSection() {
-    final rainRisk = _rainRisk;
-    if (rainRisk == null) return const SizedBox.shrink();
+    final data = ref.read(rainForecastProvider).data;
+    if (data == null) return const SizedBox.shrink();
 
-    final riskColor = _riskColor(rainRisk.floodRisk);
+    final next12hRain = _next12hRainfall(data.hourly);
+    final riskLabel = _riskLabel(data);
+    final riskColor = _riskColor(riskLabel ?? 'low');
+    final evacuationAdvisory = riskLabel != null &&
+        (riskLabel.toLowerCase().contains('severe') ||
+            riskLabel.toLowerCase().contains('high'));
 
     return Container(
       width: double.infinity,
@@ -785,114 +1092,114 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
       decoration: BoxDecoration(
         color: _cardBg,
         borderRadius: BorderRadius.circular(28.r),
-        boxShadow: [
-          BoxShadow(
-            color: FloodColors.heritagePurple.withValues(alpha: 0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        // boxShadow: [
+        //   BoxShadow(
+        //     color: FloodColors.heritagePurple.withValues(alpha: 0.06),
+        //     blurRadius: 24,
+        //     offset: const Offset(0, 10),
+        //   ),
+        // ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Live Rain Risk Assessment',
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w700,
-                    color: _titleText,
-                  ),
-                ),
-              ),
-              SizedBox(width: 8.w),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                decoration: BoxDecoration(
-                  color: _scaffoldBg,
-                  borderRadius: BorderRadius.circular(100.r),
-                ),
-                child: Text(
-                  'ML weather API',
-                  style: GoogleFonts.inter(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w600,
-                    color: FloodColors.heritagePurple,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 18.h),
-          if (rainRisk.evacuationAdvisory) ...[
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-              decoration: BoxDecoration(
-                color: FloodColors.danger.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14.r),
-                border: Border.all(
-                    color: FloodColors.danger.withValues(alpha: 0.35)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.directions_run_rounded,
-                      color: FloodColors.danger, size: 20.sp),
-                  SizedBox(width: 10.w),
-                  Expanded(
-                    child: Text(
-                      'Evacuation advisory in effect',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w700,
-                        color: FloodColors.danger,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 16.h),
-          ],
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                decoration: BoxDecoration(
-                  color: riskColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(100.r),
-                ),
-                child: Text(
-                  '${rainRisk.floodRisk.toUpperCase()} RISK',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w700,
-                    color: riskColor,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              SizedBox(width: 10.w),
-              Expanded(
-                child: Text(
-                  '${rainRisk.expectedRainMmNext12h.toStringAsFixed(0)}mm expected in the next 12h',
-                  style: GoogleFonts.inter(fontSize: 12.sp, color: _mutedText),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12.h),
-          Text(
-            rainRisk.note,
-            style: GoogleFonts.inter(
-                fontSize: 11.sp, color: _mutedText, height: 1.5),
-          ),
-        ],
-      ),
+      // child: Column(
+      //   crossAxisAlignment: CrossAxisAlignment.start,
+      //   children: [
+      //     Row(
+      //       children: [
+      //         //  Expanded(
+      //         // child: Text(
+      //         //   'Live Rain Risk Assessment',
+      //         //   overflow: TextOverflow.ellipsis,
+      //         //   style: GoogleFonts.poppins(
+      //         //     fontSize: 18.sp,
+      //         //     fontWeight: FontWeight.w700,
+      //         //     color: _titleText,
+      //         //   ),
+      //         // ),
+      //         //   ),
+      //         SizedBox(width: 8.w),
+      //         Container(
+      //           padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+      //           decoration: BoxDecoration(
+      //             color: _scaffoldBg,
+      //             borderRadius: BorderRadius.circular(100.r),
+      //           ),
+      //           // child: Text(
+      //           //   'Open-Meteo forecast',
+      //           //   style: GoogleFonts.inter(
+      //           //     fontSize: 12.sp,
+      //           //     fontWeight: FontWeight.w600,
+      //           //     color: FloodColors.heritagePurple,
+      //           //   ),
+      //           // ),
+      //         ),
+      //       ],
+      //     ),
+      //     SizedBox(height: 18.h),
+      //     if (evacuationAdvisory) ...[
+      //       Container(
+      //         width: double.infinity,
+      //         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      //         decoration: BoxDecoration(
+      //           color: FloodColors.danger.withValues(alpha: 0.1),
+      //           borderRadius: BorderRadius.circular(14.r),
+      //           border: Border.all(
+      //               color: FloodColors.danger.withValues(alpha: 0.35)),
+      //         ),
+      //         child: Row(
+      //           children: [
+      //             Icon(Icons.directions_run_rounded,
+      //                 color: FloodColors.danger, size: 20.sp),
+      //             SizedBox(width: 10.w),
+      //             Expanded(
+      //               child: Text(
+      //                 'Evacuation advisory in effect',
+      //                 style: GoogleFonts.poppins(
+      //                   fontSize: 13.sp,
+      //                   fontWeight: FontWeight.w700,
+      //                   color: FloodColors.danger,
+      //                 ),
+      //               ),
+      //             ),
+      //           ],
+      //         ),
+      //       ),
+      //       SizedBox(height: 16.h),
+      //     ],
+      //     Row(
+      //       children: [
+      //         Container(
+      //           padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+      //           decoration: BoxDecoration(
+      //             color: riskColor.withValues(alpha: 0.1),
+      //             borderRadius: BorderRadius.circular(100.r),
+      //           ),
+      //           child: Text(
+      //             '${(riskLabel ?? 'Low').toUpperCase()} RISK',
+      //             style: GoogleFonts.poppins(
+      //               fontSize: 12.sp,
+      //               fontWeight: FontWeight.w700,
+      //               color: riskColor,
+      //               letterSpacing: 0.5,
+      //             ),
+      //           ),
+      //         ),
+      //         SizedBox(width: 10.w),
+      //         Expanded(
+      //           child: Text(
+      //             '${(next12hRain ?? 0.0).toStringAsFixed(0)}mm expected in the next 12h (forecast)',
+      //             style: GoogleFonts.inter(fontSize: 12.sp, color: _mutedText),
+      //           ),
+      //         ),
+      //       ],
+      //     ),
+      //     SizedBox(height: 12.h),
+      //     Text(
+      //       _recommendedAction(riskLabel),
+      //       style: GoogleFonts.inter(
+      //           fontSize: 11.sp, color: _mutedText, height: 1.5),
+      //     ),
+      //   ],
+      // ),
     );
   }
 
@@ -919,107 +1226,6 @@ class _FloodAlertScreenState extends State<FloodAlertScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  // ─── ALERT CARD ────────────────────────────────────────
-  Widget _buildAlertCard(Map<String, dynamic> alert, int index) {
-    final color = alert['color'] as Color;
-    final bgColor = alert['bgColor'] as Color;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 12.h),
-      decoration: BoxDecoration(
-        color: _cardBg,
-        borderRadius: BorderRadius.circular(20.r),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20.r),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20.r),
-          onTap: () => _showAlertDetails(alert),
-          child: Padding(
-            padding: EdgeInsets.all(16.w),
-            child: Row(
-              children: [
-                // Status indicator bar
-                Container(
-                  width: 4.w,
-                  height: 56.h,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(2.r),
-                  ),
-                ),
-                SizedBox(width: 14.w),
-                // Icon
-                Container(
-                  width: 46.w,
-                  height: 46.w,
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(14.r),
-                  ),
-                  child: Icon(alert['icon'] as IconData,
-                      color: color, size: 22.sp),
-                ),
-                SizedBox(width: 14.w),
-                // Text content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        alert['title'],
-                        style: GoogleFonts.poppins(
-                          fontSize: 15.sp,
-                          fontWeight: FontWeight.w600,
-                          color: _titleText,
-                        ),
-                      ),
-                      SizedBox(height: 4.h),
-                      Text(
-                        alert['station'],
-                        style: GoogleFonts.inter(
-                          fontSize: 12.sp,
-                          color: _mutedText,
-                        ),
-                      ),
-                      SizedBox(height: 4.h),
-                      Row(
-                        children: [
-                          _buildStatusDot(color),
-                          SizedBox(width: 6.w),
-                          Text(
-                            '${alert['level']} · ${alert['updated']}',
-                            style: GoogleFonts.inter(
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w500,
-                              color: color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // Chevron
-                Icon(Icons.chevron_right_rounded,
-                    color: _mutedText, size: 24.sp),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 

@@ -1,0 +1,43 @@
+# May-Laud Weather & Flood Alert Backend
+
+## Overview
+Node.js Express backend for the May-Laud Flood Alert and Rain Forecast feature.
+Provides real-time weather data from OpenWeatherMap and Open-Meteo APIs.
+
+## Endpoints
+
+### GET /health
+Health check endpoint.
+
+### GET /api/weather/current?lat=&lon=
+Current weather data from OpenWeatherMap.
+
+### GET /api/weather/rain-risk?lat=&lon=
+Rain risk assessment based on current and forecasted precipitation.
+
+### GET /api/weather/forecast?lat=&lon=
+7-day weather forecast from Open-Meteo.
+
+## Configuration
+
+Create a `.env` file with:
+```
+OPENWEATHER_API_KEY=your_actual_api_key
+PORT=3000
+CORS_ORIGIN=*
+NODE_ENV=development
+```
+
+## Setup
+
+1. Install dependencies: `npm install express axios cors helmet morgan express-rate-limit`
+2. Start server: `node server.js` or `npm start`
+3. Default coordinates: lat=13.596, lon=123.177 (Milaor, Camarines Sur)
+
+## Security
+
+- API key stored in environment variables, never exposed to clients
+- CORS configured for production HTTPS
+- Request validation and timeouts
+- Rate limiting to prevent abuse
+- Helmet for security headers

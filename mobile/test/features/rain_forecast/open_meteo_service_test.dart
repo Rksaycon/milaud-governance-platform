@@ -246,7 +246,7 @@ void main() {
   group('WeatherRepository + aggregator + classifier', () {
     test('fetchForecast returns data for the assigned location', () async {
       final repo = WeatherRepository(
-        service: OpenMeteoServiceImpl(dio: _fakeDio(body: _samplePayload())),
+        dio: _fakeDio(body: _samplePayload()),
       );
 
       final data = await repo.fetchForecast(assignedLocation);
@@ -261,12 +261,10 @@ void main() {
 
     test('fetchForecast returns null when the service throws', () async {
       final repo = WeatherRepository(
-        service: OpenMeteoServiceImpl(
-          dio: _fakeDio(
-            throws: DioException(
-              requestOptions: RequestOptions(path: 'x'),
-              type: DioExceptionType.connectionError,
-            ),
+        dio: _fakeDio(
+          throws: DioException(
+            requestOptions: RequestOptions(path: 'x'),
+            type: DioExceptionType.connectionError,
           ),
         ),
       );
@@ -276,7 +274,7 @@ void main() {
 
     test('buildSnapshot produces a transparent FloodRiskSnapshot', () async {
       final repo = WeatherRepository(
-        service: OpenMeteoServiceImpl(dio: _fakeDio(body: _samplePayload())),
+        dio: _fakeDio(body: _samplePayload()),
       );
       final data = (await repo.fetchForecast(assignedLocation))!;
 

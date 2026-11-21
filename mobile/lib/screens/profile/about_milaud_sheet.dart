@@ -15,11 +15,18 @@ class AboutMilaudSheet extends StatelessWidget {
     // Adaptive backgrounds (same as ProfileScreen cards)
     final backgroundColor = isDark ? colorScheme.surface : Colors.white;
     final titleColor = isDark ? colorScheme.onSurface : HomeColors.deepAnchor;
-    final subtitleColor = isDark ? colorScheme.onSurface.withOpacity(0.6) : const Color(0xFF757575);
-    final bodyTextColor = isDark ? colorScheme.onSurface.withOpacity(0.8) : const Color(0xFF424242);
-    final dividerColor = isDark ? colorScheme.onSurface.withOpacity(0.12) : const Color(0xFFE0E0E0);
-    final handleColor = isDark ? colorScheme.onSurface.withOpacity(0.3) : Colors.grey[300]!;
-    
+    final subtitleColor = isDark
+        ? colorScheme.onSurface.withOpacity(0.6)
+        : const Color(0xFF757575);
+    final bodyTextColor = isDark
+        ? colorScheme.onSurface.withOpacity(0.8)
+        : const Color(0xFF424242);
+    final dividerColor = isDark
+        ? colorScheme.onSurface.withOpacity(0.12)
+        : const Color(0xFFE0E0E0);
+    final handleColor =
+        isDark ? colorScheme.onSurface.withOpacity(0.3) : Colors.grey[300]!;
+
     // Fixed purple – matches ProfileScreen's icon color everywhere
     final fixedAccent = HomeColors.heritagePurple;
 

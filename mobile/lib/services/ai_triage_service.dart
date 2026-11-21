@@ -18,6 +18,12 @@ import 'package:dio/dio.dart';
 
 const String _aiApiBaseUrl = 'https://jus1012-triage-delro-api.hf.space';
 
+/// Weather & flood-risk backend (see api.py's /weather/rain-risk). Runs
+/// server-side with OPENWEATHER_API_KEY — never exposed to clients.
+/// Defaults to localhost for local development; point at the deployed
+/// weather backend host for device/emulator testing.
+const String _weatherApiBaseUrl = 'http://localhost:3000';
+
 class SeverityResult {
   final String severity; // 'Critical' | 'High' | 'Medium' | 'Low'
   final double confidence; // 0-100
@@ -309,6 +315,12 @@ class AiTriageService {
     receiveTimeout: const Duration(seconds: 15),
   ));
 
+  final Dio _weatherDio = Dio(BaseOptions(
+    baseUrl: _weatherApiBaseUrl,
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 15),
+  ));
+
   /// Classifies a report's description text for severity. Returns null on
   /// any failure (network issue, backend down, etc.) rather than throwing —
   /// callers should treat a null result as "AI unavailable, fall back to
@@ -430,7 +442,7 @@ class AiTriageService {
   /// default location.
   Future<RainRiskResult?> getRainRisk({double? lat, double? lng}) async {
     try {
-      final response = await _dio.get(
+      final response = await _weatherDio.get(
         '/weather/rain-risk',
         queryParameters: {
           if (lat != null) 'lat': lat,

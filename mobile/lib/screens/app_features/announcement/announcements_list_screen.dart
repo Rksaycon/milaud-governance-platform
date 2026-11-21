@@ -83,14 +83,27 @@ class _AnnouncementsListScreenState
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+// Header
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
               child: Row(
                 children: [
-                  Icon(Icons.campaign,
-                      size: 30.sp, color: AppColors.heritagePurple),
-                  SizedBox(width: 12.w),
+                  // Back Button
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 22.sp,
+                      color: accentPurple,
+                    ),
+                    tooltip: 'Back',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+
+                  SizedBox(width: 14.w),
+
+                  // Page Title
                   Expanded(
                     child: Text(
                       'Announcements',
@@ -101,17 +114,23 @@ class _AnnouncementsListScreenState
                       ),
                     ),
                   ),
+
+                  // Refresh Button
                   IconButton(
                     onPressed: () => ref
                         .read(announcementsProvider.notifier)
                         .fetchAnnouncements(),
-                    icon: Icon(Icons.refresh,
-                        size: 26.sp, color: AppColors.heritagePurple),
+                    icon: Icon(
+                      Icons.refresh,
+                      size: 26.sp,
+                      color: accentPurple,
+                    ),
                     tooltip: 'Refresh',
                   ),
                 ],
               ),
             ),
+
             // Search bar
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),

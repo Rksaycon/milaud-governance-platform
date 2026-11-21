@@ -524,14 +524,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         icon: Icon(Icons.logout_rounded, size: 20.sp),
         label: Text('Logout',
             style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600)),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.errorDark,
-          side: BorderSide(
-              color: AppColors.errorDark.withValues(alpha: 0.35), width: 1.2),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-          backgroundColor: AppColors.of(context).errorSurface,
-        ),
+         style: OutlinedButton.styleFrom(
+           foregroundColor: AppColors.errorDark,
+           side: BorderSide(
+               color: AppColors.errorDark.withValues(alpha: 0.35), width: 1.2),
+           shape:
+               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+           backgroundColor: AppColors.of(context).errorSurface,
+           minimumSize: Size(double.infinity, 52.h),
+           padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
+         ),
       ),
     );
   }
