@@ -28,7 +28,6 @@ web/public/ml-tests/
 /backend/
 /docs/
 /tools/
-/README.md
 
 # Generated Kotlin compiler sessions
 .kotlin/
