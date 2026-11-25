@@ -1,7 +1,6 @@
 -- ONE-TIME SETUP to smoke-test the may_laud <-> AI backend integration
--- against Justin's own TRIAGEDelRo Supabase project (pxwhqcvbnoqzzozblctj),
--- instead of waiting on the IS team's project credentials. Run this in
--- THAT project's SQL Editor.
+-- against a separate test Supabase project, instead of waiting on the
+-- production project credentials. Run this in THAT project's SQL Editor.
 --
 -- This creates a citizen_reports table with the exact shape may_laud's
 -- code already expects (see app_services.dart submitReport()/

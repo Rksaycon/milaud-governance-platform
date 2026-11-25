@@ -1,6 +1,6 @@
 -- Adds AI triage columns to citizen_reports: severity auto-classification
--- and image verification, provided by the CS team's ML backend
--- (jus1012-triage-delro-api.hf.space). Run this in Supabase Dashboard →
+-- and image verification, provided by the ML triage API
+-- (see milaud-ml-triage-api). Run this in Supabase Dashboard →
 -- SQL Editor.
 --
 -- Design note: severity is split into an AI-suggested value and the final

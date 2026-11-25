@@ -4,7 +4,7 @@
 // verification for disaster-type reports) — see api.py for the actual
 // FastAPI server. Deployed on Hugging Face Spaces (free cpu-basic tier —
 // it sleeps after inactivity and takes a bit to wake on the first
-// request after a while): https://jus1012-triage-delro-api.hf.space
+// request after a while). The URL is set in _aiApiBaseUrl below.
 //
 // Used by CitizenReportService.submitReport() in app_services.dart to
 // auto-suggest a severity level and flag whether an attached photo looks
