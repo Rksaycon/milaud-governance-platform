@@ -23,7 +23,6 @@
 
 ---
 
-> **My role:** I created Milaud. I came up with the idea and the system design, and I built and trained all of its machine learning models. The mobile and web interfaces were built with my team. [Details below](#my-role).
 
 ## The problem
 
