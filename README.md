@@ -188,11 +188,3 @@ cd web && node --test
 **Reygann Saycon** (Rksaycon) · [GitHub](https://github.com/Rksaycon) · [Hugging Face](https://huggingface.co/reygann)
 
 Milaud was built as a team capstone project for the Municipality of Milaor.
-
-| Area | Who |
-|---|---|
-| Original idea and concept | **Me**: I identified the problem and proposed Milaud |
-| System design | **Me**: how residents, administrators, and the AI work together, including the human-verification workflow |
-| Machine learning | **Me**: collected, labeled, and prepared the training data (fire, flood, accident, and infrastructure photos and report text), trained all five models, ran the retraining rounds to reduce false positives, and built the [triage API](https://github.com/Rksaycon/milaud-ml-triage-api) |
-| Mobile app and web dashboard UI | **Team**: built together with my teammates |
-| API hosting | Deployed on a teammate's Hugging Face Space |
